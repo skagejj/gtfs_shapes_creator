@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/gtfs_shapes_creator" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
