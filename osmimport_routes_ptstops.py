@@ -27,6 +27,7 @@ import math
 import statistics as stat
 import time
 import datetime
+from .OSM_PT_routing import if_remove_single_file
 
 
 def if_not_make(folder_to_make):
@@ -53,6 +54,14 @@ def find(pattern, path):
             if fnmatch.fnmatch(name, pattern):
                 result.append(os.path.join(root, name))
     return result
+
+
+def add_filepath_to_lines_csv(lines_df, lines_df_csv, i_row, files_to_save: dict):
+    for file in files_to_save.keys():
+        lines_df.loc[i_row, file] = files_to_save[file]
+    if_remove_single_file(lines_df_csv)
+    lines_df.to_csv(lines_df_csv, index=False)
+    return lines_df
 
 
 def quickOSM_API(params):

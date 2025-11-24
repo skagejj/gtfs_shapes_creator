@@ -21,11 +21,11 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QListWidgetItem
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QMessageBox
+# from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+# from qgis.PyQt.QtGui import QIcon
+# from qgis.PyQt.QtWidgets import QAction, QListWidgetItem
+# from PyQt5.QtCore import Qt
+# from PyQt5.QtWidgets import QMessageBox
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -37,10 +37,13 @@ import os.path
 import pandas as pd
 from collections import defaultdict
 import os
-import webbrowser
-import glob
-import zipfile
-import time
+
+# import webbrowser
+# import glob
+# import zipfile
+# import time
+from pathlib import Path
+import datetime
 
 # will be set False in run()
 # self.first_start = True
@@ -147,6 +150,28 @@ def get_agecy_s_routes(ls_agencies_selected, gtfs_folder_path):
     return agency_routes, agencies_folder
 
 
+def generate_agencies_gtfs(gtfs_folder_path, selected_agencies, count_all_agencies):
+
+    ls_agencies_selected = [item.text() for item in selected_agencies]
+    if len(selected_agencies) == count_all_agencies:
+        agencies_folder = str(Path(gtfs_folder_path))
+        gtfs_folder_path = str(Path(gtfs_folder_path).parent.absolute())
+    else:
+        agen_folder = "agen"
+        agencies_num = [agen.split(" - ")[0] for agen in ls_agencies_selected]
+        for agen in agencies_num:
+            agen_folder = str(agen_folder) + "_" + str(agen)
+        agencies_folder = os.path.join(gtfs_folder_path, agen_folder)
+
+        if not os.path.exists(agencies_folder):
+            create_agecies_gtfs(agen_folder, agencies_num, gtfs_folder_path)
+
+    outputspath = os.path.join(agencies_folder, "outputs")
+    if not os.path.exists(outputspath):
+        os.makedirs(outputspath)
+    return agencies_folder, outputspath
+
+
 def create_agecies_gtfs(agen_folder, agencies_num, gtfs_folder_path):
 
     agency_txt = str(gtfs_folder_path) + "/agency.txt"
@@ -217,10 +242,11 @@ def create_agecies_gtfs(agen_folder, agencies_num, gtfs_folder_path):
     agency_calendar_dates = calendar_dates[calendar_dates.service_id.isin(ls_service)]
     agency_calendar_dates.to_csv(str(agency_fld) + "/calendar_dates.txt")
 
-    #         msg.close()
 
-    #         msg2 = QMessageBox()
-    #         msg2.setIcon(QMessageBox.Information)
-    #         msg2.setText("The selected agencies were saved \nin the folder: "+str(agency_fld))
-    #         msg2.setWindowTitle("Done !")
-    #         msg2.exec_()
+#         msg.close()
+
+#         msg2 = QMessageBox()
+#         msg2.setIcon(QMessageBox.Information)
+#         msg2.setText("The selected agencies were saved \nin the folder: "+str(agency_fld))
+#         msg2.setWindowTitle("Done !")
+#         msg2.exec_()
