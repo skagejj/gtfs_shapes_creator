@@ -75,7 +75,7 @@ from .osmimport_routes_ptstops import (
     if_remove,
     add_filepath_to_lines_csv,
 )
-from .OSM_PT_routing import if_remove_single_file
+from .OSM_PT_routing import if_remove_single_file, check_the_off_road_pt_stops
 from qgis.PyQt.QtWidgets import QListWidgetItem
 from PyQt5.QtCore import Qt
 import pandas as pd
@@ -1112,83 +1112,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         ls_files = os.listdir(temp_OSM_for_routing)
         ls_to_check = [file for file in ls_files if ".gpkg" in file]
 
-        allstops_to_check = pd.DataFrame()
-        for to_check in ls_to_check:
-            to_check_name = to_check[:-5]
-            to_check_gpkg = os.path.join(temp_OSM_for_routing, to_check)
-            to_check_csv = os.path.join(nmRD_temp_folder, str(to_check_name) + ".csv")
-            to_check_layer = QgsVectorLayer(to_check_gpkg, to_check_name, "ogr")
-            ls_fields_name_to_remove = ["lon", "lat"]
-
-            for field_name in ls_fields_name_to_remove:
-                field_index = to_check_layer.fields().indexFromName(field_name)
-                if field_index != -1:
-                    to_check_layer.startEditing()
-                    to_check_layer.deleteAttribute(field_index)
-                    to_check_layer.commitChanges()
-                else:
-                    print(f"Field '{field_name}' not found.")
-
-            pr = to_check_layer.dataProvider()
-            pr.addAttributes(
-                [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
-            )
-            to_check_layer.updateFields()
-            to_check_layer.commitChanges()
-
-            expression2 = QgsExpression("$x")
-            expression3 = QgsExpression("$y")
-
-            context = QgsExpressionContext()
-            context.appendScopes(
-                QgsExpressionContextUtils.globalProjectLayerScopes(to_check_layer)
-            )
-
-            with edit(to_check_layer):
-                for f in to_check_layer.getFeatures():
-                    context.setFeature(f)
-                    f["lon"] = expression2.evaluate(context)
-                    f["lat"] = expression3.evaluate(context)
-                    to_check_layer.updateFeature(f)
-
-            if_remove_single_file(to_check_csv)
-            QgsVectorFileWriter.writeAsVectorFormat(
-                to_check_layer, to_check_csv, "utf-8", driverName="CSV"
-            )
-            df_to_check = pd.read_csv(
-                to_check_csv, dtype={"trip": int, "pos": int, "stop_id": str}
-            )
-            if not df_to_check.empty:
-                allstops_to_check = pd.concat(
-                    [allstops_to_check, df_to_check], ignore_index=True
-                )
-
-        allstops_to_check.to_csv(allstops_csv, index=False)
-
-        allstops_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(
-            allstops_csv, "epsg:4326", ",", "lon", "lat"
-        )
-        allstops_layer = QgsVectorLayer(allstops_path, allstops_name, "delimitedtext")
-
-        param = {
-            "INPUT": allstops_layer,
-            "REFERENCE": OSMallroad_gpkg,
-            "DISTANCE": 0.0000001,
-            "METHOD": 0,
-        }
-        processing.run("native:selectwithindistance", param)
-
-        allstops_layer.invertSelection()
-
-        QgsVectorFileWriter.writeAsVectorFormat(
-            allstops_layer, nmRD_stops_csv, "utf-8", driverName="CSV", onlySelected=True
-        )
-        # buffer on those stops
-        # clip roads/rail
-
-        # feature by feature nearest distance new xy
-        to_check = pd.read_csv(
-            nmRD_stops_csv, dtype={"trip": int, "pos": int, "stop_id": str}
+        to_check = check_the_off_road_pt_stops(
+            temp_OSM_for_routing,
+            nmRD_temp_folder,
+            OSMallroad_gpkg,
+            allstops_name,
+            allstops_csv,
+            nmRD_stops_csv,
+            ls_to_check,
         )
 
         if not to_check.empty:
