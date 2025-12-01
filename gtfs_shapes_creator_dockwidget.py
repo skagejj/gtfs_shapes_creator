@@ -36,10 +36,6 @@ from qgis.core import (
     QgsFields,
     QgsField,
     QgsPointXY,
-    QgsExpression,
-    QgsExpressionContext,
-    QgsExpressionContextUtils,
-    edit,
 )
 
 from .agency_selection import (
@@ -74,8 +70,13 @@ from .osmimport_routes_ptstops import (
     if_display,
     if_remove,
     add_filepath_to_lines_csv,
+    find,
 )
-from .OSM_PT_routing import if_remove_single_file, check_the_off_road_pt_stops
+from .OSM_PT_routing import (
+    if_remove_single_file,
+    check_the_off_road_pt_stops,
+    move_OSMstops_on_the_road,
+)
 from qgis.PyQt.QtWidgets import QListWidgetItem
 from PyQt5.QtCore import Qt
 import pandas as pd
@@ -121,6 +122,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.uploadOSMButton.clicked.connect(self.__uploadOSM)
 
         self.zoomStopButton.clicked.connect(self.__ZoomStop)
+
+        self.RmvBusesButton.clicked.connect(self.__removeBuses)
 
     #    !!! ---- agency_seleciton functions ---- !!!
 
@@ -1112,6 +1115,15 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         ls_files = os.listdir(temp_OSM_for_routing)
         ls_to_check = [file for file in ls_files if ".gpkg" in file]
 
+        # move_OSMstops_on_the_road(
+        #     temp_OSM_for_routing,
+        #     nmRD_temp_folder,
+        #     OSMallroad_gpkg,
+        #     ls_to_check,
+        #     lines_df,
+        #     files_to_del,
+        # )
+
         to_check = check_the_off_road_pt_stops(
             temp_OSM_for_routing,
             nmRD_temp_folder,
@@ -1140,6 +1152,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.stopsnmRDlistWidget.addItem(QListWidgetItem(str(stop_to_disp)))
             if_remove_single_file(nmRD_stops_csv)
             to_check.to_csv(nmRD_stops_csv)
+            self.toolBox.setCurrentIndex(2)
         else:
             self.stopsnmRDlistWidget.addItem(
                 QListWidgetItem(
@@ -1148,8 +1161,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     )
                 )
             )
-
-        self.toolBox.setCurrentIndex(2)
+            self.toolBox.setCurrentIndex(3)
 
         print(f"Done!{datetime.datetime.now()}")
 
@@ -1195,6 +1207,117 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         canvas.zoomScale(50)
 
         canvas.refresh()
+
+    def __removeBuses(self):
+        gtfs_folder_path = self.mGtfsFolderWidget.filePath()
+
+        selected_agencies = self.listAgenciesWidget.selectedItems()
+
+        count_all_agencies = self.listAgenciesWidget.count()
+
+        agencies_folder, outputspath = generate_agencies_gtfs(
+            gtfs_folder_path, selected_agencies, count_all_agencies
+        )
+
+        temp_folder_main = str(os.getenv("USERNAME")) + "_main_files"
+        main_files_fld = os.path.join(agencies_folder, temp_folder_main)
+        buses_done_csv = os.path.join(main_files_fld, "buses.csv")
+        lines_df_csv = str(agencies_folder) + "/lines_files_list.csv"
+        uq_mn_trips_csv = str(agencies_folder) + "/temp/mini-trips/uq_mini_trips.csv"
+        files_to_delete_next_bus_loading_json = (
+            str(agencies_folder) + "/temp/files_to_delete_next_bus_loading.json"
+        )
+        if os.path.exists(files_to_delete_next_bus_loading_json):
+            with open(files_to_delete_next_bus_loading_json, "r") as f:
+                files_to_del = json.load(f)
+        else:
+            files_to_del = {"path": []}
+
+        lines_df_csv = os.path.join(str(agencies_folder), "lines_files_list.csv")
+
+        buses_done = pd.read_csv(buses_done_csv, index_col="trnsp_shrt_name")
+
+        selected_items = self.listBusWidget.selectedItems()
+        ls_lines = [item.text() for item in selected_items]
+
+        ls_lines_names = []
+        for line in ls_lines:
+            if "Funicular" in line:
+                trnsp = "Funicular"
+                shrt_name = line[10:]
+                line_name = trnsp + shrt_name
+            elif "RegRailServ" in line:
+                trnsp = "RegRailServ"
+                shrt_name = line[12:]
+                line_name = trnsp + shrt_name
+            elif "Tram" in line:
+                trnsp = "Tram"
+                shrt_name = line[5:]
+                line_name = trnsp + shrt_name
+            else:
+                trnsp = "Bus"
+                shrt_name = line[4:]
+                line_name = trnsp + shrt_name
+            ls_lines_names.append(line_name)
+            try:
+                buses_done = buses_done.drop(line)
+            except Exception:
+                print("you have never run the plugins with the " + str(line))
+
+        lines_df = pd.read_csv(lines_df_csv, dtype="str", index_col="line_name")
+
+        if os.path.exists(uq_mn_trips_csv):
+            uq_mn_trips = pd.read_csv(uq_mn_trips_csv)
+
+        ls_files = lines_df.columns
+
+        for line_name in ls_lines_names:
+            if os.path.exists(uq_mn_trips_csv):
+                i_row = 0
+                while i_row < len(uq_mn_trips):
+                    if line_name in str(uq_mn_trips.loc[i_row, "mini_tr_path"]):
+                        uq_mn_trips = uq_mn_trips.drop(i_row)
+                    i_row += 1
+                uq_mn_trips = uq_mn_trips.reset_index(drop=True)
+            for file in ls_files:
+                try:
+                    path_to_del = lines_df.loc[line_name, file]
+                    files_to_del = if_remove(path_to_del, files_to_del)
+                except Exception:
+                    print(
+                        "the "
+                        + str(line_name)
+                        + "'s \""
+                        + str(file)
+                        + "\" hasn't produced yet"
+                    )
+            try:
+                lines_df = lines_df.drop(line_name)
+            except Exception:
+                print("you have never run the plugins with the " + str(line_name))
+
+        files_to_del = if_remove(lines_df_csv, files_to_del)
+        lines_df.to_csv(lines_df_csv)
+
+        files_to_del = if_remove(buses_done_csv, files_to_del)
+        buses_done.to_csv(buses_done_csv)
+
+        if os.path.exists(uq_mn_trips_csv):
+            if_remove(uq_mn_trips_csv, files_to_del)
+            uq_mn_trips.to_csv(uq_mn_trips_csv, index=False)
+
+        founds = []
+        for line_name in ls_lines_names:
+            for found in find("*" + str(line_name) + "*", agencies_folder):
+                files_to_del = if_remove(found, files_to_del)
+            print("the " + str(line_name) + " has been removed sucessfully")
+
+        files_to_del_str = json.dumps(files_to_del, indent=2)
+        with open(files_to_delete_next_bus_loading_json, "w") as f:
+            f.write(files_to_del_str)
+        if files_to_del["path"]:
+            print("the files will be deleted only restarting QGIS")
+            print('RESTART QGIS and click again the "Remove selected lines" button')
 
     def closeEvent(self, event):
         self.closingPlugin.emit()
