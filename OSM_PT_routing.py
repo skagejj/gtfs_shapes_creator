@@ -23,6 +23,18 @@ import os
 import time
 
 
+def if_remove(file_path, files_to_del):
+    if os.path.exists(file_path):
+        try:
+            if file_path in files_to_del["path"]:
+                files_to_del["path"].remove(file_path)
+            os.remove(file_path)
+        except Exception as e:
+            files_to_del["path"].append(file_path)
+            print(f"Error removing file {file_path}: {e}")
+    return files_to_del
+
+
 def if_remove_single_file(file_path):
     if os.path.exists(file_path):
         os.remove(file_path)
@@ -414,6 +426,7 @@ def move_OSMstops_on_the_road(
     OSMallroad_gpkg,
     ls_to_check,
     lines_df,
+    files_to_del,
 ):
 
     for to_check in ls_to_check:
@@ -423,17 +436,8 @@ def move_OSMstops_on_the_road(
         OSM_new_pos_gpkg = os.path.join(
             nmRD_temp_folder, str(to_check_name) + "_new_pos1.gpkg"
         )
-        OSM_new_pos_csv = os.path.join(
-            nmRD_temp_folder, str(to_check_name) + "_new_pos1.csv"
-        )
-        nmRD_stops_csv = os.path.join(
-            nmRD_temp_folder, "nm_RD" + to_check_name + ".csv"
-        )
+
         to_check_layer = QgsVectorLayer(to_check_gpkg, to_check_name, "ogr")
-        if_remove_single_file(to_check_csv)
-        QgsVectorFileWriter.writeAsVectorFormat(
-            to_check_layer, to_check_csv, "utf-8", driverName="CSV"
-        )
 
         ls_fields_name_to_remove = ["lon", "lat"]
 
@@ -467,6 +471,12 @@ def move_OSMstops_on_the_road(
                 f["lon"] = expression2.evaluate(context)
                 f["lat"] = expression3.evaluate(context)
                 to_check_layer.updateFeature(f)
+
+        to_check_layer.commitChanges()
+
+        if_remove_single_file(to_check_csv)
+        virtual_layer_to_csv(to_check_layer, to_check_csv)
+
         param = {
             "INPUT": to_check_layer,
             "REFERENCE": OSMallroad_gpkg,
@@ -477,83 +487,137 @@ def move_OSMstops_on_the_road(
 
         to_check_layer.invertSelection()
 
-        QgsVectorFileWriter.writeAsVectorFormat(
-            to_check_layer, nmRD_stops_csv, "utf-8", driverName="CSV", onlySelected=True
-        )
+        if to_check_layer.selectedFeatureCount() > 0:
 
-        nmRD_stops = pd.read_csv(nmRD_stops_csv)
+            OSM_off_road_gpkg = os.path.join(
+                nmRD_temp_folder, to_check_name + "_OSM_off_road.gpkg"
+            )
 
-        line_name = nmRD_stops.loc[0, "line_name"]
-        idx = lines_df.index[lines_df["line_name"] == line_name].tolist()[0]
-        spl_road_gpkg = lines_df.loc[idx, "Spl_road"]
+            nmRD_stops_csv = os.path.join(
+                nmRD_temp_folder, to_check_name + "_OSM_off_road.csv"
+            )
 
-        params = {
-            "INPUT": QgsProcessingFeatureSourceDefinition(
+            OSM_new_pos_csv = os.path.join(
+                nmRD_temp_folder, str(to_check_name) + "_new_pos1.csv"
+            )
+
+            virtual_layer_to_csv(to_check_layer, nmRD_stops_csv, seletedFeatures=True)
+
+            QgsVectorFileWriter.writeAsVectorFormat(
                 to_check_layer,
-                selectedFeaturesOnly=True,
-                featureLimit=-1,
-                geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid,
-            ),
-            "INPUT_2": spl_road_gpkg,
-            "FIELDS_TO_COPY": ["fid"],
-            "DISCARD_NONMATCHING": True,
-            "PREFIX": "nrstrd_",
-            "NEIGHBORS": 1,
-            "MAX_DISTANCE": 0.00015,
-            "OUTPUT": OSM_new_pos_gpkg,
-        }
-        processing.run("native:joinbynearest", params)
+                OSM_off_road_gpkg,
+                "utf-8",
+                to_check_layer.crs(),
+                driverName="GPKG",
+                onlySelected=True,
+            )
 
-        GTFS_pos_layer = QgsVectorLayer(
-            OSM_new_pos_gpkg, "GTFSnmRCT_" + str(line_name), "ogr"
-        )
-        QgsVectorFileWriter.writeAsVectorFormat(
-            GTFS_pos_layer, OSM_new_pos_csv, "utf-8", driverName="CSV"
-        )
+            nmRD_stops = pd.read_csv(nmRD_stops_csv)
 
-        OSM_new_pos_df = pd.read_csv(
-            OSM_new_pos_csv,
-            dtype={"trip": int, "pos": int, "stop_id": str},
-            index_col={"fid"},
-        )
+            line_name = nmRD_stops.loc[0, "line_name"]
+            idx = lines_df.index[lines_df["line_name"] == line_name].tolist()[0]
+            spl_road_gpkg = lines_df.loc[idx, "Spl_roads"]
 
-        ls_to_keep = [
-            "fid",
-            "GTFS_stop_id",
-            "line_name",
-            "trip",
-            "pos",
-            "loc_base",
-            "line_trip",
-            "stop_id",
-            "nearest_x",
-            "nearest_y",
-        ]
-        exist_cols = OSM_new_pos_df.columns
-        ls_to_drop = [col for col in ls_to_keep if not col in exist_cols]
-        OSM_new_pos_df = OSM_new_pos_df.drop(ls_to_drop, axis=1)
-        OSM_new_pos_df["lon"] = OSM_new_pos_df["nearest_x"].fillna(
-            OSM_new_pos_df["lon"]
-        )
-        OSM_new_pos_df["lat"] = OSM_new_pos_df["nearest_y"].fillna(
-            OSM_new_pos_df["lat"]
-        )
-        OSM_new_pos_df["loc_base"] = "moved off-road-OSM on the nearest"
+            params = {
+                "INPUT": OSM_off_road_gpkg,
+                "INPUT_2": spl_road_gpkg,
+                "FIELDS_TO_COPY": ["fid"],
+                "DISCARD_NONMATCHING": True,
+                "PREFIX": "nrstrd_",
+                "NEIGHBORS": 1,
+                "MAX_DISTANCE": 0.00015,
+                "OUTPUT": OSM_new_pos_gpkg,
+            }
+            processing.run("native:joinbynearest", params)
 
-        df_to_check = pd.read_csv(
-            to_check_csv,
-            dtype={"trip": int, "pos": int, "stop_id": str},
-            index_col={"fid"},
-        )
-        print(OSM_new_pos_df)
-        df_to_check = df_to_check.drop(OSM_new_pos_df.index.to_list(), axis=0)
-        print(df_to_check)
-        to_save = pd.concat[df_to_check, OSM_new_pos_df]
+            OSM_new_pos_layer = QgsVectorLayer(
+                OSM_new_pos_gpkg, to_check_name + "_OSM_off_road", "ogr"
+            )
+            virtual_layer_to_csv(OSM_new_pos_layer, OSM_new_pos_csv)
 
-        if_remove_single_file(to_check_csv)
-        to_save.to_csv(to_check_csv)
+            OSM_new_pos_df = pd.read_csv(
+                OSM_new_pos_csv,
+                dtype={"trip": int, "pos": int, "stop_id": str, "fid": int},
+            )
 
-        save_csv_overwrite_gpkg(to_check_name, to_check_gpkg, to_check_csv)
+            cols_to_keep = [
+                "GTFS_stop_id",
+                "line_name",
+                "trip",
+                "pos",
+                "lon",
+                "lat",
+                "loc_base",
+                "line_trip",
+                "stop_id",
+                "nearest_x",
+                "nearest_y",
+            ]
+
+            ls_to_drop = [
+                col for col in OSM_new_pos_df.columns if not col in cols_to_keep
+            ]
+            OSM_new_pos_df = OSM_new_pos_df.drop(ls_to_drop, axis=1)
+            OSM_new_pos_df["lon"] = OSM_new_pos_df["nearest_x"].fillna(
+                OSM_new_pos_df["lon"]
+            )
+            OSM_new_pos_df["lat"] = OSM_new_pos_df["nearest_y"].fillna(
+                OSM_new_pos_df["lat"]
+            )
+            OSM_new_pos_df["loc_base"] = "moved off-road-OSM on the nearest"
+
+            cols_to_keep = [
+                "GTFS_stop_id",
+                "line_name",
+                "trip",
+                "pos",
+                "loc_base",
+                "line_trip",
+                "stop_id",
+                "lon",
+                "lat",
+            ]
+
+            OSM_new_pos_df = OSM_new_pos_df[cols_to_keep]
+            print(OSM_new_pos_df)
+
+            df_to_check = pd.read_csv(
+                to_check_csv,
+                dtype={"trip": int, "pos": int, "stop_id": str},
+            )
+            df_to_check = df_to_check[cols_to_keep]
+            row_to_drop = OSM_new_pos_df.pos.unique()
+            df_to_check = df_to_check[~df_to_check["pos"].isin(row_to_drop)]
+            print(df_to_check)
+            to_save = (
+                pd.concat([df_to_check, OSM_new_pos_df], ignore_index=True)
+                .sort_values("pos")
+                .reset_index(drop=True)
+            )
+            to_save["fid"] = to_save["pos"] + 1
+            to_save = to_save.set_index("fid")
+            print(to_save)
+            if_remove_single_file(to_check_csv)
+            to_save.to_csv(to_check_csv)
+            if_remove(OSM_new_pos_csv, files_to_del)
+            if_remove(OSM_new_pos_gpkg, files_to_del)
+            if_remove(nmRD_stops_csv, files_to_del)
+            if_remove(OSM_off_road_gpkg, files_to_del)
+            save_csv_overwrite_gpkg(to_check_name, to_check_gpkg, to_check_csv)
+
+
+def virtual_layer_to_csv(
+    virtual_layer: QgsVectorLayer, csv_path, seletedFeatures: bool = False
+):
+    save_options = QgsVectorFileWriter.SaveVectorOptions()
+    save_options.driverName = "csv"
+    save_options.fileEncoding = "utf-8"
+    save_options.onlySelectedFeatures = seletedFeatures
+    layer_context = virtual_layer.transformContext()
+    coordinates = QgsCoordinateTransformContext(layer_context)
+    QgsVectorFileWriter.writeAsVectorFormatV3(
+        virtual_layer, csv_path, coordinates, save_options
+    )
 
 
 def save_csv_overwrite_gpkg(name, gpkg, csv):
@@ -562,15 +626,15 @@ def save_csv_overwrite_gpkg(name, gpkg, csv):
         csv, "epsg:4326", ",", "lon", "lat"
     )
     save_options = QgsVectorFileWriter.SaveVectorOptions()
-    save_options.driverName = "GPKG"
+    save_options.driverName = "gpkg"
+    save_options.fileEncoding = "utf-8"
     save_options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteFile
-    to_check_layer = QgsVectorLayer(to_check_path, name, "delimitedtext")
-    QgsVectorFileWriter.writeAsVectorFormat(
-        to_check_layer,
-        gpkg,
-        "UTF-8",
-        to_check_layer.crs(),
-        save_options,
+
+    new_OSM_pos_layer = QgsVectorLayer(to_check_path, name, "delimitedtext")
+    layer_context = new_OSM_pos_layer.transformContext()
+    coordinates = QgsCoordinateTransformContext(layer_context)
+    QgsVectorFileWriter.writeAsVectorFormatV3(
+        new_OSM_pos_layer, gpkg, coordinates, save_options
     )
 
 
@@ -586,46 +650,8 @@ def check_the_off_road_pt_stops(
     allstops_to_check = pd.DataFrame()
     for to_check in ls_to_check:
         to_check_name = to_check[:-5]
-        to_check_gpkg = os.path.join(temp_OSM_for_routing, to_check)
         to_check_csv = os.path.join(nmRD_temp_folder, str(to_check_name) + ".csv")
-        to_check_layer = QgsVectorLayer(to_check_gpkg, to_check_name, "ogr")
-        ls_fields_name_to_remove = ["lon", "lat"]
 
-        for field_name in ls_fields_name_to_remove:
-            field_index = to_check_layer.fields().indexFromName(field_name)
-            if field_index != -1:
-                to_check_layer.startEditing()
-                to_check_layer.deleteAttribute(field_index)
-                to_check_layer.commitChanges()
-            else:
-                print(f"Field '{field_name}' not found.")
-
-        pr = to_check_layer.dataProvider()
-        pr.addAttributes(
-            [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
-        )
-        to_check_layer.updateFields()
-        to_check_layer.commitChanges()
-
-        expression2 = QgsExpression("$x")
-        expression3 = QgsExpression("$y")
-
-        context = QgsExpressionContext()
-        context.appendScopes(
-            QgsExpressionContextUtils.globalProjectLayerScopes(to_check_layer)
-        )
-
-        with edit(to_check_layer):
-            for f in to_check_layer.getFeatures():
-                context.setFeature(f)
-                f["lon"] = expression2.evaluate(context)
-                f["lat"] = expression3.evaluate(context)
-                to_check_layer.updateFeature(f)
-
-        if_remove_single_file(to_check_csv)
-        QgsVectorFileWriter.writeAsVectorFormat(
-            to_check_layer, to_check_csv, "utf-8", driverName="CSV"
-        )
         df_to_check = pd.read_csv(
             to_check_csv, dtype={"trip": int, "pos": int, "stop_id": str}
         )
