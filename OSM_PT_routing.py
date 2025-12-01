@@ -437,9 +437,7 @@ def move_OSMstops_on_the_road(
             nmRD_temp_folder, str(to_check_name) + "_new_pos1.gpkg"
         )
 
-        if_remove_single_file(to_check_csv)
         to_check_layer = QgsVectorLayer(to_check_gpkg, to_check_name, "ogr")
-        virtual_layer_to_csv(to_check_layer, to_check_csv)
 
         ls_fields_name_to_remove = ["lon", "lat"]
 
@@ -473,6 +471,12 @@ def move_OSMstops_on_the_road(
                 f["lon"] = expression2.evaluate(context)
                 f["lat"] = expression3.evaluate(context)
                 to_check_layer.updateFeature(f)
+
+        to_check_layer.commitChanges()
+
+        if_remove_single_file(to_check_csv)
+        virtual_layer_to_csv(to_check_layer, to_check_csv)
+
         param = {
             "INPUT": to_check_layer,
             "REFERENCE": OSMallroad_gpkg,
@@ -527,7 +531,7 @@ def move_OSMstops_on_the_road(
             processing.run("native:joinbynearest", params)
 
             OSM_new_pos_layer = QgsVectorLayer(
-                to_check_name + "_OSM_off_road", OSM_new_pos_gpkg, "ogr"
+                OSM_new_pos_gpkg, to_check_name + "_OSM_off_road", "ogr"
             )
             virtual_layer_to_csv(OSM_new_pos_layer, OSM_new_pos_csv)
 
@@ -646,46 +650,8 @@ def check_the_off_road_pt_stops(
     allstops_to_check = pd.DataFrame()
     for to_check in ls_to_check:
         to_check_name = to_check[:-5]
-        to_check_gpkg = os.path.join(temp_OSM_for_routing, to_check)
         to_check_csv = os.path.join(nmRD_temp_folder, str(to_check_name) + ".csv")
-        to_check_layer = QgsVectorLayer(to_check_gpkg, to_check_name, "ogr")
-        ls_fields_name_to_remove = ["lon", "lat"]
 
-        for field_name in ls_fields_name_to_remove:
-            field_index = to_check_layer.fields().indexFromName(field_name)
-            if field_index != -1:
-                to_check_layer.startEditing()
-                to_check_layer.deleteAttribute(field_index)
-                to_check_layer.commitChanges()
-            else:
-                print(f"Field '{field_name}' not found.")
-
-        pr = to_check_layer.dataProvider()
-        pr.addAttributes(
-            [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
-        )
-        to_check_layer.updateFields()
-        to_check_layer.commitChanges()
-
-        expression2 = QgsExpression("$x")
-        expression3 = QgsExpression("$y")
-
-        context = QgsExpressionContext()
-        context.appendScopes(
-            QgsExpressionContextUtils.globalProjectLayerScopes(to_check_layer)
-        )
-
-        with edit(to_check_layer):
-            for f in to_check_layer.getFeatures():
-                context.setFeature(f)
-                f["lon"] = expression2.evaluate(context)
-                f["lat"] = expression3.evaluate(context)
-                to_check_layer.updateFeature(f)
-
-        if_remove_single_file(to_check_csv)
-        QgsVectorFileWriter.writeAsVectorFormat(
-            to_check_layer, to_check_csv, "utf-8", driverName="CSV"
-        )
         df_to_check = pd.read_csv(
             to_check_csv, dtype={"trip": int, "pos": int, "stop_id": str}
         )

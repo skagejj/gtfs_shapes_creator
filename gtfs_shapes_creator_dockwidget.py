@@ -71,6 +71,8 @@ from .osmimport_routes_ptstops import (
     if_remove,
     add_filepath_to_lines_csv,
     find,
+    display_OSM_and_SWISSTOPO_IMAGE_maps,
+    display_all_OSM4routing_trips_stops,
 )
 from .OSM_PT_routing import (
     if_remove_single_file,
@@ -993,7 +995,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 stops_txt,
                 files_to_del,
             )
-            lines_df.loc[i_row, "OSM4routing"] = OSMstops_forrouting
+            lines_df = add_filepath_to_lines_csv(
+                lines_df,
+                lines_df_csv,
+                i_row,
+                {"OSM4routing": OSMstops_forrouting},
+            )
             OSM4r_toconcat = pd.read_csv(OSMstops_forrouting)
             OSM4routing = pd.concat([OSM4routing, OSM4r_toconcat], ignore_index=True)
             i_row += 1
@@ -1001,55 +1008,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if os.path.exists(OSM4rout_file):
             os.remove(OSM4rout_file)
         OSM4routing.to_csv(OSM4rout_file, index=False)
-
-        # publishing the back ground for better read of the data
-        if not QgsProject.instance().mapLayersByName("SWISSIMAGE 10 cm"):
-            uri = "contextualWMSLegend=0&crs=EPSG:4326&dpiMode=7&featureCount=10&format=image/jpeg&layers=ch.swisstopo.swissimage&styles=default&tilePixelRatio=0&url=https://wms.geo.admin.ch/"
-            CHimage_layer = QgsRasterLayer(uri, "SWISSIMAGE 10 cm", "wms")
-            QgsProject.instance().addMapLayer(CHimage_layer)
-
-        if not QgsProject.instance().mapLayersByName("OSM Standard"):
-            uri = "type=xyz&zmin=0&zmax=19&url=http://tile.openstreetmap.org/{z}/{x}/{y}.png"
-            OSMmap_layer = QgsRasterLayer(uri, "OSM Standard", "wms")
-            QgsProject.instance().addMapLayer(OSMmap_layer)
-
-        if not QgsProject.instance().mapLayersByName(city_roads_name):
-            city_roads_layer = QgsVectorLayer(OSM_roads_gpkg, city_roads_name, "ogr")
-            QgsProject.instance().addMapLayer(city_roads_layer)
-
-        if_display(OSM_rails_gpkg, city_rails_name)
-
-        if_display(OSM_Regtrain_gpkg, city_Regtrain_name)
-
-        if_display(OSM_funicular_gpkg, city_funicular_name)
-
-        # publishing the trips on the canvas
-        ls_buses_todisp = [str(bus) for bus in ls_buses_selected]
-        ls_buses_select_df = pd.DataFrame(ls_buses_todisp).rename(
-            columns={0: "trnsp_shrt_name"}
-        )
-        ls_buses_select_df = ls_buses_select_df.astype({"trnsp_shrt_name": "str"})
-        ls_buses_select_df = ls_buses_select_df.merge(
-            lines_df, how="left", on="trnsp_shrt_name"
-        )
-        ls_trnsprt_todisplay = list(ls_buses_select_df.line_name.unique())
-        ls_files = os.listdir(temp_OSM_for_routing)
-        ls_gpkg = [file for file in ls_files if ".gpkg" in file]
-
-        for trnsprt in ls_trnsprt_todisplay:
-            to_display = [str(gpkg) for gpkg in ls_gpkg if trnsprt in gpkg]
-            for layer in to_display:
-                if not QgsProject.instance().mapLayersByName(str(layer[:-5])):
-                    OSM_trip4rout_gpkg = str(temp_OSM_for_routing) + "/" + str(layer)
-                    OSM_trip4rout_layer = QgsVectorLayer(
-                        OSM_trip4rout_gpkg, str(layer[:-5]), "ogr"
-                    )
-                    QgsProject.instance().addMapLayer(OSM_trip4rout_layer)
-
-        # saving the lines df
-        if os.path.exists(lines_df_csv):
-            os.remove(lines_df_csv)
-        lines_df.to_csv(lines_df_csv, index=False)
 
         #  >>>>>>>>>>>>     XXXXXXXXXXXXXXXXXXXX     <<<<<<<<<<<
         #  >>>  !!! ---- OSM_PT_rounting functions ---- !!! <<<<
@@ -1115,14 +1073,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         ls_files = os.listdir(temp_OSM_for_routing)
         ls_to_check = [file for file in ls_files if ".gpkg" in file]
 
-        # move_OSMstops_on_the_road(
-        #     temp_OSM_for_routing,
-        #     nmRD_temp_folder,
-        #     OSMallroad_gpkg,
-        #     ls_to_check,
-        #     lines_df,
-        #     files_to_del,
-        # )
+        move_OSMstops_on_the_road(
+            temp_OSM_for_routing,
+            nmRD_temp_folder,
+            OSMallroad_gpkg,
+            ls_to_check,
+            lines_df,
+            files_to_del,
+        )
 
         to_check = check_the_off_road_pt_stops(
             temp_OSM_for_routing,
@@ -1163,26 +1121,41 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             )
             self.toolBox.setCurrentIndex(3)
 
+        display_OSM_and_SWISSTOPO_IMAGE_maps()
+
+        if_display(OSM_roads_gpkg, city_roads_name)
+
+        if_display(OSM_rails_gpkg, city_rails_name)
+
+        if_display(OSM_Regtrain_gpkg, city_Regtrain_name)
+
+        if_display(OSM_funicular_gpkg, city_funicular_name)
+
+        display_all_OSM4routing_trips_stops(
+            temp_OSM_for_routing, ls_buses_selected, lines_df
+        )
+
+        # saving the lines df
+        if os.path.exists(lines_df_csv):
+            os.remove(lines_df_csv)
+        lines_df.to_csv(lines_df_csv, index=False)
+
         print(f"Done!{datetime.datetime.now()}")
 
     def __ZoomStop(self):
 
-        gtfs_folder_path = self.mGtfsFolderWidget.filePath()
+        # load the folders
 
-        outputspath = "to define"  # to define
-        if not os.path.exists(outputspath):
-            os.makedirs(outputspath)
+        gtfs_folder_path = self.mGtfsFolderWidget.filePath()
 
         selected_agencies = self.listAgenciesWidget.selectedItems()
 
-        ls_agencies_selected = [item.text() for item in selected_agencies]
-
-        agen_folder = "agen"
-        agencies_num = [agen.split(" - ")[0] for agen in ls_agencies_selected]
-        for agen in agencies_num:
-            agen_folder = str(agen_folder) + "_" + str(agen)
-
-        agencies_folder = os.path.join(gtfs_folder_path, agen_folder)
+        count_all_agencies = self.listAgenciesWidget.count()
+        agencies_folder, outputspath = generate_agencies_gtfs(
+            gtfs_folder_path,
+            selected_agencies,
+            count_all_agencies,
+        )
 
         temp_folder = "zoom_nmRD"
         nmRD_temp_folder = os.path.join(agencies_folder, temp_folder)

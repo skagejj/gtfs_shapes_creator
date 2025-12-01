@@ -15,6 +15,7 @@ from qgis.core import (
     QgsCoordinateTransformContext,
     QgsFields,
     QgsWkbTypes,
+    QgsRasterLayer,
 )
 from qgis.utils import iface
 from qgis.PyQt.QtCore import QVariant
@@ -1687,8 +1688,49 @@ def transcript_main_files(
     main_files.to_csv(main_files_csv, index=False)
 
 
+def display_OSM_and_SWISSTOPO_IMAGE_maps():
+    if not QgsProject.instance().mapLayersByName("SWISSIMAGE 10 cm"):
+        uri = "contextualWMSLegend=0&crs=EPSG:4326&dpiMode=7&featureCount=10&format=image/jpeg&layers=ch.swisstopo.swissimage&styles=default&tilePixelRatio=0&url=https://wms.geo.admin.ch/"
+        CHimage_layer = QgsRasterLayer(uri, "SWISSIMAGE 10 cm", "wms")
+        QgsProject.instance().addMapLayer(CHimage_layer)
+
+    if not QgsProject.instance().mapLayersByName("OSM Standard"):
+        uri = (
+            "type=xyz&zmin=0&zmax=19&url=http://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        )
+        OSMmap_layer = QgsRasterLayer(uri, "OSM Standard", "wms")
+        QgsProject.instance().addMapLayer(OSMmap_layer)
+
+
 def if_display(file_path, layer_name):
     if os.path.exists(file_path):
         if not QgsProject.instance().mapLayersByName(layer_name):
             city_r_layer = QgsVectorLayer(file_path, layer_name, "ogr")
             QgsProject.instance().addMapLayer(city_r_layer)
+
+
+def display_all_OSM4routing_trips_stops(
+    temp_OSM_for_routing, ls_buses_selected, lines_df
+):
+    ls_buses_todisp = [str(bus) for bus in ls_buses_selected]
+    ls_buses_select_df = pd.DataFrame(ls_buses_todisp).rename(
+        columns={0: "trnsp_shrt_name"}
+    )
+    ls_buses_select_df = ls_buses_select_df.astype({"trnsp_shrt_name": "str"})
+    ls_buses_select_df = ls_buses_select_df.merge(
+        lines_df, how="left", on="trnsp_shrt_name"
+    )
+    ls_trnsprt_todisplay = list(ls_buses_select_df.line_name.unique())
+    ls_files = os.listdir(temp_OSM_for_routing)
+    ls_with_gpkg = [file for file in ls_files if ".gpkg" in file]
+    ls_gpkg = [file for file in ls_with_gpkg if "shm" not in file and "wal" not in file]
+
+    for trnsprt in ls_trnsprt_todisplay:
+        to_display = [str(gpkg) for gpkg in ls_gpkg if trnsprt in gpkg]
+        for layer in to_display:
+            if not QgsProject.instance().mapLayersByName(str(layer[:-5])):
+                OSM_trip4rout_gpkg = str(temp_OSM_for_routing) + "/" + str(layer)
+                OSM_trip4rout_layer = QgsVectorLayer(
+                    OSM_trip4rout_gpkg, str(layer[:-5]), "ogr"
+                )
+                QgsProject.instance().addMapLayer(OSM_trip4rout_layer)
