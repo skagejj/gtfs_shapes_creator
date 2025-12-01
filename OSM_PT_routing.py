@@ -9,10 +9,7 @@ from qgis.core import (
     QgsExpressionContext,
     QgsExpressionContextUtils,
     edit,
-    QgsFeatureRequest,
-    QgsProcessingFeatureSourceDefinition,
     QgsCoordinateTransformContext,
-    QgsWkbTypes,
 )
 
 import pandas as pd
