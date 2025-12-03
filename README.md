@@ -1,7 +1,7 @@
 # GTFS shapes.txt Creator 
 
 ## Overview
-This QGIS plugin enables advanced routing analysis for public transport systems by leveraging processed OpenStreetMap (OSM) data and GTFS (General Transit Feed Specification) datasets. It is designed to work seamlessly with other plugins in the series to provide comprehensive spatial analysis and routing capabilities.
+This QGIS plugin enables advanced routing analysis for public transport systems by leveraging processed OpenStreetMap (OSM) data and GTFS (General Transit Feed Specification) datasets. It replace the ancient plugins to provide comprehensive smooth spatial analysis and routing capabilities.
 
 ## Features
 - **Public Transport Routing**: Calculates optimal routes using OSM road networks and GTFS stop data.
