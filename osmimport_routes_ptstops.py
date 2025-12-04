@@ -23,17 +23,39 @@ import pandas as pd
 import re
 import numpy as np
 import os
+import json
 import fnmatch
 import math
 import statistics as stat
 import time
 import datetime
-from .OSM_PT_routing import if_remove_single_file
+from .OSM_PT_routing import if_remove_single_file, virtual_layer_to_csv
 
 
-def if_not_make(folder_to_make):
-    if not os.path.exists(folder_to_make):
-        os.makedirs(folder_to_make)
+def if_not_make(folders_to_make: list):
+    for folder in folders_to_make:
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+
+def load_files_to_del(agencies_folder):
+    files_to_delete_next_bus_loading_json = (
+        str(agencies_folder) + "/temp/files_to_delete_next_bus_loading.json"
+    )
+    if os.path.exists(files_to_delete_next_bus_loading_json):
+        with open(files_to_delete_next_bus_loading_json, "r") as f:
+            files_to_del = json.load(f)
+        for file in files_to_del["path"]:
+            files_to_del = if_remove(file, files_to_del)
+        files_to_del_str = json.dumps(files_to_del, indent=2)
+        with open(files_to_delete_next_bus_loading_json, "w") as f:
+            f.write(files_to_del_str)
+        if files_to_del["path"]:
+            print("the files will be deleted only restarting QGIS")
+            print('RESTART QGIS and click again the "Update Transport numbers" button')
+    else:
+        files_to_del = {"path": []}
+    return files_to_del
 
 
 def if_remove(file_path, files_to_del):
@@ -199,7 +221,7 @@ def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg, OSM_roads_gpkg, highway_speed_
         ]
     )
     bus_lanes_layer.updateFields()
-    print(f"at {datetime.datetime.now()} starting to fill the oneway_routing column")
+
     expression1 = QgsExpression(
         'IF("bus:lanes:backward" is not NULL OR "busway:left" is not NULL OR "lanes:bus:backward" is not NULL OR "psv:lanes:backward" is not NULL OR "oneway:bus" is \'no\' OR "onewqy:psv" is \'no\', \'backward\',\'forward\')'
     )
@@ -275,10 +297,6 @@ def full_city_roads(
         brakets = str(brakets) + ")"
         i_row += 1
 
-    print(
-        f"at {datetime.datetime.now()} starting to fill the maxspeed in full_city_roads column"
-    )
-
     condition = str(condition) + "'40' " + str(brakets)
     expression2 = QgsExpression(condition)
 
@@ -307,10 +325,6 @@ def full_city_roads(
         "OUTPUT": full_roads_gpgk,
     }
     processing.run("native:mergevectorlayers", params)
-
-    print(
-        f"at {datetime.datetime.now()} ending to fill the maxspeed in full_city_roads column"
-    )
 
 
 def Ttbls_plus(Ttlbs_txt, Ttbls_plus_csv, dwnldfld, trips_txt):
@@ -818,9 +832,9 @@ def angles_tram(
     }
     processing.run("native:joinbynearest", params)
     GTFSnomatchplt = QgsVectorLayer(GTFSnomatchangl, "GTFSnmRD" + str(trnsprt), "ogr")
-    QgsVectorFileWriter.writeAsVectorFormat(
-        GTFSnomatchplt, GTFS_NMangcsv, "utf-8", driverName="CSV"
-    )
+
+    virtual_layer_to_csv(GTFSnomatchplt, GTFS_NMangcsv)
+
     del params, context, expression
     return anglefile, GTFSnomatchangl, GTFS_NMangcsv, spl_file
 
@@ -915,9 +929,9 @@ def angles_buses(
     }
     processing.run("native:joinbynearest", params)
     GTFSnomatchplt = QgsVectorLayer(GTFSnomatchangl, "GTFSnmRD" + str(trnsprt), "ogr")
-    QgsVectorFileWriter.writeAsVectorFormat(
-        GTFSnomatchplt, GTFS_NMangcsv, "utf-8", driverName="CSV"
-    )
+
+    virtual_layer_to_csv(GTFSnomatchplt, GTFS_NMangcsv)
+
     del params, context, expression
     return anglefile, GTFSnomatchangl, GTFS_NMangcsv, spl_file
 
@@ -1000,9 +1014,7 @@ def rectangles_sidewalk(
 
     del context
 
-    QgsVectorFileWriter.writeAsVectorFormat(
-        GTFS_angl, GTFSstps_rect_sidewalk_csv, "utf-8", driverName="CSV"
-    )
+    virtual_layer_to_csv(GTFS_angl, GTFSstps_rect_sidewalk_csv)
 
     # the QgsExpression function doesn't work with sin() function that works on the QGIS FieldCalculator
     GTFS_angldf = pd.read_csv(GTFSstps_rect_sidewalk_csv)
@@ -1290,18 +1302,18 @@ def OSMintersecGTFS(rectangles, OSMgpkg, tempOSMfolder, line):
         OSMintersecGTFSgpkg, "OSMintersecGTFS" + str(line), "ogr"
     )
     OSMjoinGTFScsv = str(tempOSMfolder) + "/OSMjoinGTFS_" + str(line) + ".csv"
-    QgsVectorFileWriter.writeAsVectorFormat(
-        OSMjoinGTFSlayer, OSMjoinGTFScsv, "utf-8", driverName="CSV"
+    virtual_layer_to_csv(OSMjoinGTFSlayer, OSMjoinGTFScsv)
+
+    OSMjnGTFS = pd.read_csv(
+        OSMjoinGTFScsv, dtype={"GTFS_trip": int, "GTFS_pos": int, "GTFS_stop_id": str}
     )
-    OSMjnGTFS = pd.read_csv(OSMjoinGTFScsv)
 
     OSMnomatchGTFSlayer = QgsVectorLayer(
         OSMnomatchGTFSgpkg, "OSM" + str(line) + "_NOmatch", "ogr"
     )
     OSMnomatchGTFScsv = str(tempOSMfolder) + "/OSM" + str(line) + "_NOmatch.csv"
-    QgsVectorFileWriter.writeAsVectorFormat(
-        OSMnomatchGTFSlayer, OSMnomatchGTFScsv, "utf-8", driverName="CSV"
-    )
+    virtual_layer_to_csv(OSMnomatchGTFSlayer, OSMnomatchGTFScsv)
+
     OSMnomatch = pd.read_csv(OSMnomatchGTFScsv)
     del params
     return OSMjnGTFS, OSMnomatch, OSMjoinGTFScsv, OSMnomatchGTFScsv
@@ -1387,10 +1399,8 @@ def stp_posGTFSnm_rect(
     GTFS_posangl.commitChanges()
 
     del context
+    virtual_layer_to_csv(GTFS_posangl, GTFS_nmRCT_pos_CSV1)
 
-    QgsVectorFileWriter.writeAsVectorFormat(
-        GTFS_posangl, GTFS_nmRCT_pos_CSV1, "utf-8", driverName="CSV"
-    )
     # QgsVectorFileWriter.writeAsVectorFormat(GTFS_posangl,GTFScsv,"utf-8",driverName = "CSV")
 
     # calculate the angle of the new stop_position
@@ -1451,9 +1461,7 @@ def stp_posGTFSnm_rect(
     processing.run("native:joinbynearest", params)
 
     GTFS_pos_layer = QgsVectorLayer(GTFS_pos, "GTFSnmRCT_" + str(line_name), "ogr")
-    QgsVectorFileWriter.writeAsVectorFormat(
-        GTFS_pos_layer, GTFS_nmRCT_pos_CSV3, "utf-8", driverName="CSV"
-    )
+    virtual_layer_to_csv(GTFS_pos_layer, GTFS_nmRCT_pos_CSV3)
 
     GTFS_posdf = pd.read_csv(GTFS_nmRCT_pos_CSV3)
 
@@ -1484,13 +1492,15 @@ def joinNEWandValidOSM(
     files_to_del,
 ):
 
-    GTFSnm = pd.read_csv(GTFSnomatch_RD, dtype={"stop_id": str})
+    GTFSnm = pd.read_csv(
+        GTFSnomatch_RD, dtype={"trip": int, "pos": int, "stop_id": str}
+    )
     validOSM = pd.read_csv(OSMintersectGTFS)
     GTFSss = pd.read_csv(GTFSstps_seg)
     OSMstops_unsorted = pd.DataFrame()
 
     if os.path.exists(newOSMpos):
-        newOSM = pd.read_csv(newOSMpos, dtype={"stop_id": str})
+        newOSM = pd.read_csv(newOSMpos, dtype={"trip": int, "pos": int, "stop_id": str})
         newOSM = newOSM[["stop_id", "line_name", "trip", "pos", "lon", "lat"]]
         newOSM["loc_base"] = "generated from GTFS on OSM roads"
         newOSM = newOSM.rename(columns={"stop_id": "GTFS_stop_id"})
@@ -1618,12 +1628,7 @@ def joinNEWandValidOSM(
             OSM4rout_layer, OSMstops_trip_gpkg, "UTF-8", OSM4rout_layer.crs(), "GPKG"
         )
         files_to_del = if_remove(OSMstops_trip_csv, files_to_del)
-
-    OSMstops_forrouting = (
-        str(temp_OSM_for_routing) + "/OSM4routing_" + str(line) + ".csv"
-    )
-    OSMstops_tosave.to_csv(OSMstops_forrouting, index=False)
-    return OSMstops_forrouting, files_to_del
+    return files_to_del
 
 
 # to attach at the end of the stops correctly visualized on the map

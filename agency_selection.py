@@ -131,6 +131,32 @@ def check_gtfs_folder(gtfs_folder_path):
     #         msg.show()
 
 
+def load_csv_in_dfs(
+    GTFSnm_angledf_csv,
+    OSMwithGTFS_csv,
+    dfnomatch_csv,
+    GTFSnm_rect_csv,
+    GTFSnmRCT_posdf_csv,
+):
+    if os.path.exists(GTFSnm_angledf_csv):
+        GTFSnm_angledf = pd.read_csv(GTFSnm_angledf_csv)
+    if os.path.exists(OSMwithGTFS_csv):
+        OSMwithGTFS = pd.read_csv(OSMwithGTFS_csv)
+    if os.path.exists(dfnomatch_csv):
+        dfnomatch = pd.read_csv(dfnomatch_csv)
+    if os.path.exists(GTFSnm_rect_csv):
+        GTFSnm_rect = pd.read_csv(GTFSnm_rect_csv)
+    if os.path.exists(GTFSnmRCT_posdf_csv):
+        GTFSnmRCT_posdf = pd.read_csv(GTFSnmRCT_posdf_csv)
+    return (
+        GTFSnm_angledf,
+        OSMwithGTFS,
+        dfnomatch,
+        GTFSnm_rect,
+        GTFSnmRCT_posdf,
+    )
+
+
 def get_agecy_s_routes(ls_agencies_selected, gtfs_folder_path):
 
     print("you selected:")

@@ -46,6 +46,7 @@ from .agency_selection import (
     check_gtfs_folder,
     get_agecy_s_routes,
     generate_agencies_gtfs,
+    load_csv_in_dfs,
 )
 
 from .osmimport_routes_ptstops import (
@@ -71,6 +72,7 @@ from .osmimport_routes_ptstops import (
     shape_assignement,
     if_not_make,
     if_display,
+    load_files_to_del,
     if_remove,
     add_filepath_to_lines_csv,
     find,
@@ -85,6 +87,7 @@ from .OSM_PT_routing import (
     mini_routing,
     create_minitrips,
     trips,
+    virtual_layer_to_csv,
 )
 
 from .GTFS_shapes_Tracer import (
@@ -198,25 +201,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         )
         ls_transport = routes.trnsp_shrt_name.unique()
 
-        files_to_delete_next_bus_loading_json = (
-            str(gtfs_folder_path)
-            + "/"
-            + str(agency_name_fold)
-            + "/temp/files_to_delete_next_bus_loading.json"
-        )
-        if os.path.exists(files_to_delete_next_bus_loading_json):
-            with open(files_to_delete_next_bus_loading_json, "r") as f:
-                files_to_del = json.load(f)
-            for file in files_to_del["path"]:
-                files_to_del = if_remove(file, files_to_del)
-            files_to_del_str = json.dumps(files_to_del, indent=2)
-            with open(files_to_delete_next_bus_loading_json, "w") as f:
-                f.write(files_to_del_str)
-            if files_to_del["path"]:
-                print("the files will be deleted only restarting QGIS")
-                print(
-                    'RESTART QGIS and click again the "Update Transport numbers" button'
-                )
+        files_to_del = load_files_to_del(gtfs_folder_path)
         self.toolBox.setCurrentIndex(1)
         for trnsprt in ls_transport:
             self.listBusWidget.addItem(QListWidgetItem(str(trnsprt)))
@@ -337,6 +322,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             + str(files_to_delete_next_bus_loading_name)
             + ".json"
         )
+        files_to_del = load_files_to_del(agencies_folder)
 
         temp_folder = str(os.getenv("USERNAME")) + "_main_files"
         main_files_fld = os.path.join(str(agencies_folder) + "/" + str(temp_folder))
@@ -427,9 +413,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             QgsVectorFileWriter.writeAsVectorFormat(
                 Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG"
             )
-            QgsVectorFileWriter.writeAsVectorFormat(
-                Roads_layer, OSM_roads_csv, "utf-8", driverName="CSV"
-            )
+            virtual_layer_to_csv(Roads_layer, OSM_roads_csv)
 
             downloading_railway(extent, extent_quickosm, OSM_tramways_gpkg, "tram")
 
@@ -496,41 +480,40 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 highway_speed_csv,
             )
 
-        if_not_make(temp_folder_Ttbls)
-        if_not_make(temp_folder_GTFSstops)
-        if_not_make(temproadfldr)
-        if_not_make(temp_GTFSnm_folder)
-        if_not_make(temp_rect_folder)
-        if_not_make(perdist)
-        if_not_make(OSMstops_temp_folder)
-        if_not_make(temp_OSM_folder)
-        if_not_make(temp_GTFSpos_folder)
-        if_not_make(temp_OSM_for_routing)
-        if_not_make(folder_trip_id_assign)
+        if_not_make(
+            [
+                temp_folder_Ttbls,
+                temp_folder_GTFSstops,
+                temproadfldr,
+                temp_GTFSnm_folder,
+                temp_rect_folder,
+                perdist,
+                OSMstops_temp_folder,
+                temp_OSM_folder,
+                temp_GTFSpos_folder,
+                temp_OSM_for_routing,
+                folder_trip_id_assign,
+            ]
+        )
 
-        if os.path.exists(GTFSnm_angledf_csv):
-            GTFSnm_angledf = pd.read_csv(GTFSnm_angledf_csv)
-        if os.path.exists(OSMwithGTFS_csv):
-            OSMwithGTFS = pd.read_csv(OSMwithGTFS_csv)
-        if os.path.exists(dfnomatch_csv):
-            dfnomatch = pd.read_csv(dfnomatch_csv)
-        if os.path.exists(GTFSnm_rect_csv):
-            GTFSnm_rect = pd.read_csv(GTFSnm_rect_csv)
-        if os.path.exists(GTFSnmRCT_posdf_csv):
-            GTFSnmRCT_posdf = pd.read_csv(GTFSnmRCT_posdf_csv)
-        if os.path.exists(OSM4rout_file):
-            OSM4routing = pd.read_csv(OSM4rout_file)
+        (
+            GTFSnm_angledf,
+            OSMwithGTFS,
+            dfnomatch,
+            GTFSnm_rect,
+            GTFSnmRCT_posdf,
+        ) = load_csv_in_dfs(
+            GTFSnm_angledf_csv,
+            OSMwithGTFS_csv,
+            dfnomatch_csv,
+            GTFSnm_rect_csv,
+            GTFSnmRCT_posdf_csv,
+        )
 
         if os.path.exists(ls_buses_done_csv):
             ls_buses_df = pd.read_csv(ls_buses_done_csv)
             prev_ls_buses = [str(bus) for bus in list(ls_buses_df.trnsp_shrt_name)]
             del ls_buses_df
-
-        if os.path.exists(files_to_delete_next_bus_loading_json):
-            with open(files_to_delete_next_bus_loading_json, "r") as f:
-                files_to_del = json.load(f)
-        else:
-            files_to_del = {"path": []}
 
         try:
             prev_ls_buses
@@ -1007,7 +990,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             OSMintersectGTFS = lines_df.loc[i_row, "OSMintersecGTFS"]
             GTFSstps_seg = lines_df.loc[i_row, "GTFSstops&segments"]
             line = lines_df.loc[i_row, "line_name"]
-            OSMstops_forrouting, files_to_del = joinNEWandValidOSM(
+            files_to_del = joinNEWandValidOSM(
                 newOSMpos,
                 GTFSnomatch_RD,
                 OSMintersectGTFS,
@@ -1017,19 +1000,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 stops_txt,
                 files_to_del,
             )
-            lines_df = add_filepath_to_lines_csv(
-                lines_df,
-                lines_df_csv,
-                i_row,
-                {"OSM4routing": OSMstops_forrouting},
-            )
-            OSM4r_toconcat = pd.read_csv(OSMstops_forrouting)
-            OSM4routing = pd.concat([OSM4routing, OSM4r_toconcat], ignore_index=True)
-            i_row += 1
 
-        if os.path.exists(OSM4rout_file):
-            os.remove(OSM4rout_file)
-        OSM4routing.to_csv(OSM4rout_file, index=False)
+            i_row += 1
 
         #  >>>>>>>>>>>>     XXXXXXXXXXXXXXXXXXXX     <<<<<<<<<<<
         #  >>>  !!! ---- OSM_PT_rounting functions ---- !!! <<<<
@@ -1093,7 +1065,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         nmRD_stops_csv = os.path.join(nmRD_temp_folder, str(nmRD_stops_name) + ".csv")
 
         ls_files = os.listdir(temp_OSM_for_routing)
-        ls_to_check = [file for file in ls_files if ".gpkg" in file]
+        ls_with_gpkg = [file for file in ls_files if ".gpkg" in file]
+        ls_to_check = [
+            file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
+        ]
 
         move_OSMstops_on_the_road(
             temp_OSM_for_routing,
@@ -1157,7 +1132,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 )
             )
 
-            self.__OSM_PT_routing
+            self.__OSM_PT_routing()
 
             self.toolBox.setCurrentIndex(3)
 
@@ -1172,8 +1147,13 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         all_layers = QgsProject.instance().mapLayers().values()
         save_and_stop_editing_layers(all_layers)
-
+        for layer in all_layers:
+            if "OSM4routing_" in layer.name():
+                QgsProject.instance().removeMapLayer(layer)
         # load the folders
+
+        selected_items = self.listBusWidget.selectedItems()
+        ls_buses_selected = [item.text() for item in selected_items]
 
         gtfs_folder_path = self.mGtfsFolderWidget.filePath()
 
@@ -1185,6 +1165,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             selected_agencies,
             count_all_agencies,
         )
+
+        files_to_del = load_files_to_del(agencies_folder)
 
         temp_folder = "OSM_data"
         road_temp_folder = os.path.join(agencies_folder, temp_folder)
@@ -1249,25 +1231,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         ls_to_do = [
             file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
         ]
-        # ls_gpkg_to_run = [file for file in ls_files if ".gpkg" in file]
-
-        # strategy changed, in the mini_routing function
-        # if the path has been already calculated is not considered
-        # # to avoid make twice the routing, because the process is time demanding
-        # if os.path.exists(trips_done_csv):
-        #     gpkg_done_df = pd.read_csv(trips_done_csv)
-        #     ls_gpkg_done = list(gpkg_done_df.lines_draw_gpkg.unique())
-        #     ls_to_do = [gpkg for gpkg in ls_gpkg_to_run if not gpkg in ls_gpkg_done ]
-        # else:
-        #     ls_to_do = ls_gpkg_to_run
 
         ls_gpkg_df = pd.DataFrame(ls_to_do).rename(columns={0: "lines_draw_gpkg"})
-        # ls_gpkg_df = pd.DataFrame(ls_gpkg_to_run).rename(columns={0:'lines_draw_gpkg'})
 
-        # if_remove(trips_done_csv)
-        # ls_gpkg_df.to_csv(trips_done_csv,index=False)
-
-        # merging the layer to route
         layers_to_route = []
         for to_do in ls_to_do:
             layers_to_route.append(
@@ -1278,7 +1244,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 + str(to_do[:-5])
             )
 
-        if_remove(OSM4rout_gpkg)
+        if_remove(OSM4rout_gpkg, files_to_del)
         params = {
             "LAYERS": layers_to_route,
             "CRS": QgsCoordinateReferenceSystem("EPSG:4326"),
@@ -1322,10 +1288,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 OSM4rout_layer.updateFeature(f)
         OSM4rout_layer.commitChanges()
 
-        if_remove(OSM4rout_csv)
-        QgsVectorFileWriter.writeAsVectorFormat(
-            OSM4rout_layer, OSM4rout_csv, "utf-8", driverName="CSV"
-        )
+        if_remove(OSM4rout_csv, files_to_del)
+        virtual_layer_to_csv(OSM4rout_layer, OSM4rout_csv)
 
         print("creating mini-trips table")
         # create mini trips
@@ -1344,7 +1308,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         )
 
         lines_trips = pd.read_csv(lines_trips_csv)
+        display_OSM_and_SWISSTOPO_IMAGE_maps()
         print("now it makes one file for each trip, it will take shorter time")
+        takeoff_ = lambda a: "".join([x for x in list(a) if x != "_"])
+        ls_selected_line_names = [takeoff_(x) for x in ls_buses_selected]
         idx = 0
         while idx < len(lines_trips):
             trip = str(lines_trips.loc[idx, "line_trip"])
@@ -1357,12 +1324,13 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 print(str(trip) + "  is merging all its mini-trips")
                 trips(trnsprt_shapes, trip, trip_gpkg, trip_csv, temp_folder_minitrip)
 
-            if not QgsProject.instance().mapLayersByName(str(trip)):
-                trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
-                QgsProject.instance().addMapLayer(trip_layer)
+            if [x for x in ls_selected_line_names if x in trip]:
+                if not QgsProject.instance().mapLayersByName(str(trip)):
+                    trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
+                    QgsProject.instance().addMapLayer(trip_layer)
             idx += 1
 
-        if_remove(trips_done_csv)
+        if_remove_single_file(trips_done_csv)
         ls_gpkg_df.to_csv(trips_done_csv, index=False)
         os.remove(lines_trips_csv)
         lines_trips.to_csv(lines_trips_csv, index=False)
@@ -1390,7 +1358,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         for trip_to_disp in ls_trips_to_display:
             self.tripsListWidget.addItem(QListWidgetItem(str(trip_to_disp)))
 
-        pass
+        self.toolBox.setCurrentIndex(3)
 
     def __shapesCreator(self):
         # load the folders
