@@ -9,10 +9,7 @@ from qgis.core import (
     QgsExpressionContext,
     QgsExpressionContextUtils,
     edit,
-    QgsFeatureRequest,
-    QgsProcessingFeatureSourceDefinition,
     QgsCoordinateTransformContext,
-    QgsWkbTypes,
 )
 
 import pandas as pd
@@ -141,7 +138,9 @@ def mini_routing(
     tempfld,
     trnsprt_shapes,
 ):
-    mini_trips_unsorted = pd.read_csv(OSM4routing_csv)
+    mini_trips_unsorted = pd.read_csv(
+        OSM4routing_csv, dtype={"trip": int, "pos": int, "stop_id": str}
+    )
     mini_trips_to_select = mini_trips_unsorted.sort_values(
         ["line_name", "trip", "pos"]
     ).reset_index(drop=True)
@@ -512,7 +511,9 @@ def move_OSMstops_on_the_road(
                 onlySelected=True,
             )
 
-            nmRD_stops = pd.read_csv(nmRD_stops_csv)
+            nmRD_stops = pd.read_csv(
+                nmRD_stops_csv, dtype={"trip": int, "pos": int, "stop_id": str}
+            )
 
             line_name = nmRD_stops.loc[0, "line_name"]
             idx = lines_df.index[lines_df["line_name"] == line_name].tolist()[0]
@@ -579,7 +580,6 @@ def move_OSMstops_on_the_road(
             ]
 
             OSM_new_pos_df = OSM_new_pos_df[cols_to_keep]
-            print(OSM_new_pos_df)
 
             df_to_check = pd.read_csv(
                 to_check_csv,
@@ -588,7 +588,7 @@ def move_OSMstops_on_the_road(
             df_to_check = df_to_check[cols_to_keep]
             row_to_drop = OSM_new_pos_df.pos.unique()
             df_to_check = df_to_check[~df_to_check["pos"].isin(row_to_drop)]
-            print(df_to_check)
+
             to_save = (
                 pd.concat([df_to_check, OSM_new_pos_df], ignore_index=True)
                 .sort_values("pos")
@@ -596,7 +596,7 @@ def move_OSMstops_on_the_road(
             )
             to_save["fid"] = to_save["pos"] + 1
             to_save = to_save.set_index("fid")
-            print(to_save)
+
             if_remove_single_file(to_check_csv)
             to_save.to_csv(to_check_csv)
             if_remove(OSM_new_pos_csv, files_to_del)
@@ -622,8 +622,10 @@ def virtual_layer_to_csv(
 
 def save_csv_overwrite_gpkg(name, gpkg, csv):
     print("starting overwriting the gpkg positions")
-    to_check_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(
-        csv, "epsg:4326", ",", "lon", "lat"
+    to_check_path = (
+        r"file:///{}?crs={}&delimiter={}&xField={}&yField={}&field=trip:integer".format(
+            csv, "epsg:4326", ",", "lon", "lat"
+        )
     )
     save_options = QgsVectorFileWriter.SaveVectorOptions()
     save_options.driverName = "gpkg"
@@ -662,8 +664,10 @@ def check_the_off_road_pt_stops(
 
     allstops_to_check.to_csv(allstops_csv, index=False)
 
-    allstops_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(
-        allstops_csv, "epsg:4326", ",", "lon", "lat"
+    allstops_path = (
+        r"file:///{}?crs={}&delimiter={}&xField={}&yField={}&field=trip:integer".format(
+            allstops_csv, "epsg:4326", ",", "lon", "lat"
+        )
     )
     allstops_layer = QgsVectorLayer(allstops_path, allstops_name, "delimitedtext")
 
@@ -677,9 +681,7 @@ def check_the_off_road_pt_stops(
 
     allstops_layer.invertSelection()
 
-    QgsVectorFileWriter.writeAsVectorFormat(
-        allstops_layer, nmRD_stops_csv, "utf-8", driverName="CSV", onlySelected=True
-    )
+    virtual_layer_to_csv(allstops_layer, nmRD_stops_csv, seletedFeatures=True)
 
     to_check = pd.read_csv(
         nmRD_stops_csv, dtype={"trip": int, "pos": int, "stop_id": str}
