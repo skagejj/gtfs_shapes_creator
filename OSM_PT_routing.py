@@ -51,7 +51,7 @@ def save_and_stop_editing_layers(layers):
 
 
 # Debugging the changing in field type in some step before
-def create_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv):
+def defining_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv):
     OSM4rout_unsorted = pd.read_csv(
         OSM4rout_csv, dtype={"trip": int, "pos": int, "stop_id": str}
     )
@@ -135,7 +135,7 @@ def mini_routing(
     tram_rails_gpgk,
     OSM_Regtrain_gpkg,
     OSM_funicular_gpkg,
-    tempfld,
+    temp_folder_minitrip,
     trnsprt_shapes,
 ):
     mini_trips_unsorted = pd.read_csv(
@@ -145,8 +145,12 @@ def mini_routing(
         ["line_name", "trip", "pos"]
     ).reset_index(drop=True)
 
-    ls_files_tempfld = os.listdir(tempfld)
-    ls_mini_tr_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
+    ls_files_tempfld = os.listdir(temp_folder_minitrip)
+    ls_with_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
+    ls_mini_tr_gpkg = [
+        file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
+    ]
+
     ls_mini_trips_done = [file[:-5] for file in ls_mini_tr_gpkg]
 
     mini_trips = mini_trips_to_select[
@@ -154,269 +158,289 @@ def mini_routing(
     ]
 
     unique_mini_tr_name = "uq_mini_trips"
-    unique_mini_tr_csv = os.path.join(tempfld, str(unique_mini_tr_name) + ".csv")
-
-    # ls_minitrips = [str(tempfld)+'/'+str(file) for file in ls_mini_tr_gpkg]
+    unique_mini_tr_csv = os.path.join(
+        temp_folder_minitrip, str(unique_mini_tr_name) + ".csv"
+    )
 
     if not mini_trips.empty:
         mini_trips = mini_trips.reset_index(drop=True)
-        print("There are " + str(len(mini_trips)) + " mini-trips to calculate")
-        tot = len(mini_trips)
-        total = tot
-        i_row = 0
-        n_minitr = 1
-        tm0 = time.time()
+        tot, total, i_row, n_minitr, tm0 = count_time_left(mini_trips)
         if os.path.exists(unique_mini_tr_csv):
-            unique_mini_tr = pd.read_csv(unique_mini_tr_csv)
+            unique_mini_tr = pd.read_csv(unique_mini_tr_csv, index_col="IDstr_end_pt")
         else:
             unique_mini_tr = pd.DataFrame()
+
         while i_row < len(mini_trips):
-            start_point = (
-                str(mini_trips.loc[i_row, "lon"])
-                + ","
-                + str(mini_trips.loc[i_row, "lat"])
-                + " [EPSG:4326]"
-            )
-            end_point = (
-                str(mini_trips.loc[i_row, "next_lon"])
-                + ","
-                + str(mini_trips.loc[i_row, "next_lat"])
-                + " [EPSG:4326]"
-            )
+            start_point, end_point = generate_start_end_points_for_ID(mini_trips, i_row)
             if start_point == end_point:
                 i_row += 1
                 continue
             mini_trip_gpkg = (
-                str(tempfld) + "/" + str(mini_trips.loc[i_row, "mini_tr_pos"]) + ".gpkg"
+                str(temp_folder_minitrip)
+                + "/"
+                + str(mini_trips.loc[i_row, "mini_tr_pos"])
+                + ".gpkg"
             )
-            if mini_trips.loc[i_row, "mini_tr_pos"]:
-                i_row_uq_tr = 0
-                IDstr_end_pt = str(start_point) + " " + str(end_point)
-                # check for same mini trip
-                while i_row_uq_tr < len(unique_mini_tr):
-                    if unique_mini_tr.loc[i_row_uq_tr, "IDstr_end_pt"] == IDstr_end_pt:
-                        print(
-                            "copying "
-                            + str(mini_trips.loc[i_row, "mini_tr_pos"])
-                            + " from another mini trip"
-                        )
-                        if n_minitr != 1:
-                            n_minitr = n_minitr - 1
-                        total = total - 1
-                        src = unique_mini_tr.loc[i_row_uq_tr, "mini_tr_path"]
-                        if os.name == "nt":  # Windows
-                            cmd = f'copy "{src}" "{mini_trip_gpkg}"'
-                        else:  # Unix/Linux
-                            cmd = f'cp "{src}" "{mini_trip_gpkg}"'
-                        os.system(cmd)
-                        break
-                    i_row_uq_tr += 1
-                # in absence of the same mini trip
-                if i_row_uq_tr == len(unique_mini_tr):
-                    print("creating " + str(mini_trips.loc[i_row, "mini_tr_pos"]))
-                    unique_mini_tr.loc[i_row_uq_tr, "mini_tr_path"] = mini_trip_gpkg
-                    unique_mini_tr.loc[i_row_uq_tr, "IDstr_end_pt"] = IDstr_end_pt
-                    try:
-                        if "Tram" in str(mini_trips.loc[i_row, "line_name"]):
-                            if_remove_single_file(mini_trip_gpkg)
-                            params = {
-                                "INPUT": tram_rails_gpgk,
-                                "STRATEGY": 0,
-                                "DIRECTION_FIELD": "",
-                                "VALUE_FORWARD": "",
-                                "VALUE_BACKWARD": "",
-                                "VALUE_BOTH": "",
-                                "DEFAULT_DIRECTION": 2,
-                                "SPEED_FIELD": "",
-                                "DEFAULT_SPEED": 50,
-                                "TOLERANCE": 0,
-                                "START_POINT": start_point,
-                                "END_POINT": end_point,
-                                "OUTPUT": mini_trip_gpkg,
-                            }
-                            processing.run("native:shortestpathpointtopoint", params)
-                        elif "RegRailServ" in str(mini_trips.loc[i_row, "line_name"]):
-                            if_remove_single_file(mini_trip_gpkg)
-                            params = {
-                                "INPUT": OSM_Regtrain_gpkg,
-                                "STRATEGY": 0,
-                                "DIRECTION_FIELD": "",
-                                "VALUE_FORWARD": "",
-                                "VALUE_BACKWARD": "",
-                                "VALUE_BOTH": "",
-                                "DEFAULT_DIRECTION": 2,
-                                "SPEED_FIELD": "",
-                                "DEFAULT_SPEED": 50,
-                                "TOLERANCE": 0,
-                                "START_POINT": start_point,
-                                "END_POINT": end_point,
-                                "OUTPUT": mini_trip_gpkg,
-                            }
-                            processing.run("native:shortestpathpointtopoint", params)
-                        elif "Funicular" in str(mini_trips.loc[i_row, "line_name"]):
-                            if_remove_single_file(mini_trip_gpkg)
-                            params = {
-                                "INPUT": OSM_funicular_gpkg,
-                                "STRATEGY": 0,
-                                "DIRECTION_FIELD": "",
-                                "VALUE_FORWARD": "",
-                                "VALUE_BACKWARD": "",
-                                "VALUE_BOTH": "",
-                                "DEFAULT_DIRECTION": 2,
-                                "SPEED_FIELD": "",
-                                "DEFAULT_SPEED": 50,
-                                "TOLERANCE": 0,
-                                "START_POINT": start_point,
-                                "END_POINT": end_point,
-                                "OUTPUT": mini_trip_gpkg,
-                            }
-                            processing.run("native:shortestpathpointtopoint", params)
-                        else:
-                            if_remove_single_file(mini_trip_gpkg)
-                            params = {
-                                "INPUT": full_roads_gpgk,
-                                "STRATEGY": 1,
-                                "DIRECTION_FIELD": "oneway_routing",
-                                "VALUE_FORWARD": "forward",
-                                "VALUE_BACKWARD": "backward",
-                                "VALUE_BOTH": "",
-                                "DEFAULT_DIRECTION": 2,
-                                "SPEED_FIELD": "maxspeed_routing",
-                                "DEFAULT_SPEED": 50,
-                                "TOLERANCE": 0,
-                                "START_POINT": start_point,
-                                "END_POINT": end_point,
-                                "OUTPUT": mini_trip_gpkg,
-                            }
-                            processing.run("native:shortestpathpointtopoint", params)
-                    except Exception:
-                        os.remove(mini_trip_gpkg)
-                        print(
-                            "something wrong with "
-                            + str(mini_trips.loc[i_row, "mini_tr_pos"])
-                        )
-                        break
-                # ls_minitrips.append(mini_trip_gpkg)
-            print("There are " + str(tot) + " mini-trips to calculate")
-            tm1 = time.time()
-            dtm = tm1 - tm0
-            tmtot = dtm / n_minitr * (total)
-            tmrest = tmtot - dtm
-            hours = int(tmrest / 3600)
-            min = int(int(tmrest / 60) - int(tmrest / 3600) * 60)
-            if hours > 0:
-                print("    " + str(hours) + " hours and " + str(min) + " minutes left")
-            else:
-                print("    " + str(min) + " minutes left")
-            tot = tot - 1
-            i_row += 1
-            n_minitr += 1
+
+            IDstr_end_pt = str(start_point) + " " + str(end_point)
+            # check for same mini trip
+            # trying another method
+            try:
+                src = unique_mini_tr.loc[IDstr_end_pt, "mini_tr_path"]
+                print(
+                    "copying "
+                    + str(mini_trips.loc[i_row, "mini_tr_pos"])
+                    + " from another mini trip"
+                )
+                if os.name == "nt":  # Windows
+                    cmd = f'copy "{src}" "{mini_trip_gpkg}"'
+                else:  # Unix/Linux
+                    cmd = f'cp "{src}" "{mini_trip_gpkg}"'
+                os.system(cmd)
+                # for counting time left
+                if n_minitr != 1:
+                    n_minitr = n_minitr - 1
+                total = total - 1
+
+            except:  # in absence of the same mini trip
+                print("creating " + str(mini_trips.loc[i_row, "mini_tr_pos"]))
+                unique_mini_tr.loc[IDstr_end_pt, "mini_tr_path"] = mini_trip_gpkg
+                try:  # generating the mini trip finally!!! yeah!!!
+                    mini_routing_finally(
+                        full_roads_gpgk,
+                        tram_rails_gpgk,
+                        OSM_Regtrain_gpkg,
+                        OSM_funicular_gpkg,
+                        mini_trips,
+                        i_row,
+                        start_point,
+                        end_point,
+                        mini_trip_gpkg,
+                    )
+                except Exception:
+                    os.remove(mini_trip_gpkg)
+                    print(
+                        "something wrong with "
+                        + str(mini_trips.loc[i_row, "mini_tr_pos"])
+                    )
+                    break
+
+            tot, i_row, n_minitr = count_time_left_2(tm0, total, tot, i_row, n_minitr)
         if_remove_single_file(unique_mini_tr_csv)
         unique_mini_tr.to_csv(unique_mini_tr_csv, index=False)
 
-    # if_remove(trnsprt_shapes)
-    # params = {'LAYERS':ls_minitrips,
-    #           'CRS':QgsCoordinateReferenceSystem('EPSG:4326'),
-    #           'OUTPUT':trnsprt_shapes}
-    # processing.run("native:mergevectorlayers",params)
 
-    # return trnsprt_shapes
+def mini_routing_finally(
+    full_roads_gpgk,
+    tram_rails_gpgk,
+    OSM_Regtrain_gpkg,
+    OSM_funicular_gpkg,
+    mini_trips,
+    i_row,
+    start_point,
+    end_point,
+    mini_trip_gpkg,
+):
+    if "Tram" in str(mini_trips.loc[i_row, "line_name"]):
+        if_remove_single_file(mini_trip_gpkg)
+        mini_routing_for_rail(tram_rails_gpgk, start_point, end_point, mini_trip_gpkg)
+    elif "RegRailServ" in str(mini_trips.loc[i_row, "line_name"]):
+        if_remove_single_file(mini_trip_gpkg)
+        mini_routing_for_rail(
+            OSM_Regtrain_gpkg,
+            start_point,
+            end_point,
+            mini_trip_gpkg,
+        )
+
+    elif "Funicular" in str(mini_trips.loc[i_row, "line_name"]):
+        if_remove_single_file(mini_trip_gpkg)
+        mini_routing_for_rail(
+            OSM_funicular_gpkg,
+            start_point,
+            end_point,
+            mini_trip_gpkg,
+        )
+
+    else:
+        if_remove_single_file(mini_trip_gpkg)
+        params = {
+            "INPUT": full_roads_gpgk,
+            "STRATEGY": 1,
+            "DIRECTION_FIELD": "oneway_routing",
+            "VALUE_FORWARD": "forward",
+            "VALUE_BACKWARD": "backward",
+            "VALUE_BOTH": "",
+            "DEFAULT_DIRECTION": 2,
+            "SPEED_FIELD": "maxspeed_routing",
+            "DEFAULT_SPEED": 50,
+            "TOLERANCE": 0,
+            "START_POINT": start_point,
+            "END_POINT": end_point,
+            "OUTPUT": mini_trip_gpkg,
+        }
+        processing.run("native:shortestpathpointtopoint", params)
+
+
+def mini_routing_for_rail(rail_network_gpkg, start_point, end_point, mini_trip_gpkg):
+    params = {
+        "INPUT": rail_network_gpkg,
+        "STRATEGY": 0,
+        "DIRECTION_FIELD": "",
+        "VALUE_FORWARD": "",
+        "VALUE_BACKWARD": "",
+        "VALUE_BOTH": "",
+        "DEFAULT_DIRECTION": 2,
+        "SPEED_FIELD": "",
+        "DEFAULT_SPEED": 50,
+        "TOLERANCE": 0,
+        "START_POINT": start_point,
+        "END_POINT": end_point,
+        "OUTPUT": mini_trip_gpkg,
+    }
+    processing.run("native:shortestpathpointtopoint", params)
+
+
+def generate_start_end_points_for_ID(mini_trips, i_row):
+    start_point = (
+        str(mini_trips.loc[i_row, "lon"])
+        + ","
+        + str(mini_trips.loc[i_row, "lat"])
+        + " [EPSG:4326]"
+    )
+    end_point = (
+        str(mini_trips.loc[i_row, "next_lon"])
+        + ","
+        + str(mini_trips.loc[i_row, "next_lat"])
+        + " [EPSG:4326]"
+    )
+
+    return start_point, end_point
+
+
+def count_time_left(mini_trips):
+    print("There are " + str(len(mini_trips)) + " mini-trips to calculate")
+    tot = len(mini_trips)
+    total = tot
+    i_row = 0
+    n_minitr = 1
+    tm0 = time.time()
+    return tot, total, i_row, n_minitr, tm0
+
+
+def count_time_left_2(tm0, total, tot, i_row, n_minitr):
+    print("There are " + str(tot) + " mini-trips to calculate")
+    tm1 = time.time()
+    dtm = tm1 - tm0
+    tmtot = dtm / n_minitr * (total)
+    tmrest = tmtot - dtm
+    hours = int(tmrest / 3600)
+    min = int(int(tmrest / 60) - int(tmrest / 3600) * 60)
+    if hours > 0:
+        print("    " + str(hours) + " hours and " + str(min) + " minutes left")
+    else:
+        print("    " + str(min) + " minutes left")
+    tot = tot - 1
+    i_row += 1
+    n_minitr += 1
+    return tot, i_row, n_minitr
 
 
 def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
 
     ls_files_tempfld = os.listdir(temp_folder_minitrip)
-    ls_mini_tr_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
+    ls_with_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
+    ls_mini_tr_gpkg = [
+        file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
+    ]
     ls_mini_tr = [file for file in ls_mini_tr_gpkg if trip in file]
 
-    mini_tr_df_unsorted = pd.DataFrame(ls_mini_tr)
+    if not ls_mini_tr:
+        print(f"no minitrips find for {trip}")
+    else:  # generate the trips from mini-trips
+        mini_tr_df_unsorted = pd.DataFrame(ls_mini_tr)
+        pattern2 = r"(\d+)\.gpkg$"
+        i_row = 0
+        while i_row < len(mini_tr_df_unsorted):
+            nd2pos = re.search(pattern2, mini_tr_df_unsorted.loc[i_row, 0]).group(1)
+            mini_tr_df_unsorted.loc[i_row, "nd2pos"] = int(nd2pos)
+            i_row += 1
 
-    pattern2 = r"(\d+)\.gpkg$"
-    i_row = 0
-    while i_row < len(mini_tr_df_unsorted):
-        nd2pos = re.search(pattern2, mini_tr_df_unsorted.loc[i_row, 0]).group(1)
-        mini_tr_df_unsorted.loc[i_row, "nd2pos"] = int(nd2pos)
-        i_row += 1
+        mini_tr_df = mini_tr_df_unsorted.sort_values(["nd2pos"]).reset_index(drop=True)
+        mini_tr_df = mini_tr_df.rename(columns={0: "gpkg"})
 
-    mini_tr_df = mini_tr_df_unsorted.sort_values(["nd2pos"]).reset_index(drop=True)
-    mini_tr_df = mini_tr_df.rename(columns={0: "gpkg"})
+        ls_minitrips_gpkg = mini_tr_df.gpkg.unique()
 
-    ls_minitrips_gpkg = mini_tr_df.gpkg.unique()
+        ls_minitrips = [
+            str(temp_folder_minitrip) + "/" + str(file) for file in ls_minitrips_gpkg
+        ]
 
-    ls_minitrips = [
-        str(temp_folder_minitrip) + "/" + str(file) for file in ls_minitrips_gpkg
-    ]
+        if_remove_single_file(trip_gpkg)
+        params = {
+            "LAYERS": ls_minitrips,
+            "CRS": QgsCoordinateReferenceSystem("EPSG:4326"),
+            "OUTPUT": trip_gpkg,
+        }
+        processing.run("native:mergevectorlayers", params)
 
-    if_remove_single_file(trip_gpkg)
-    params = {
-        "LAYERS": ls_minitrips,
-        "CRS": QgsCoordinateReferenceSystem("EPSG:4326"),
-        "OUTPUT": trip_gpkg,
-    }
-    processing.run("native:mergevectorlayers", params)
+        trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
 
-    # to_search = str(trip)+'%'
-    # trip_selection =  '"layer" LIKE \''+ str(to_search)+'\''
-    # if_remove(trip_gpkg)
-    # params = {'INPUT':mini_shapes_file,
-    #         'EXPRESSION':trip_selection,
-    #         'OUTPUT':trip_gpkg}
-    # processing.run("native:extractbyexpression", params)
+        pr = trip_layer.dataProvider()
+        pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
+        trip_layer.updateFields()
 
-    trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
+        expression1 = QgsExpression("$length")
+        # expression2 = QgsExpression('regexp_substr( "layer" ,\'(\\d+)$\')')
 
-    # ,QgsField("nd2pos", QVariant.Int)
-    pr = trip_layer.dataProvider()
-    pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
-    trip_layer.updateFields()
+        context = QgsExpressionContext()
+        context.appendScopes(
+            QgsExpressionContextUtils.globalProjectLayerScopes(trip_layer)
+        )
 
-    expression1 = QgsExpression("$length")
-    # expression2 = QgsExpression('regexp_substr( "layer" ,\'(\\d+)$\')')
+        with edit(trip_layer):
+            for f in trip_layer.getFeatures():
+                context.setFeature(f)
+                f["dist_stops"] = expression1.evaluate(context)
+                trip_layer.updateFeature(f)
+        trip_layer.commitChanges()
 
-    context = QgsExpressionContext()
-    context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(trip_layer))
+        lsto_keep = ["layer", "dist_stops", "start", "end"]
 
-    with edit(trip_layer):
-        for f in trip_layer.getFeatures():
-            context.setFeature(f)
-            f["dist_stops"] = expression1.evaluate(context)
-            # f['nd2pos'] = expression2.evaluate(context)
-            trip_layer.updateFeature(f)
-    trip_layer.commitChanges()
+        IDto_delete = [
+            trip_layer.fields().indexOf(field_name) for field_name in lsto_keep
+        ]
+        IDto_delete = [index for index in IDto_delete if index != -1]
 
-    lsto_keep = ["layer", "dist_stops", "start", "end"]
+        if_remove_single_file(trip_csv)
+        QgsVectorFileWriter.writeAsVectorFormat(
+            trip_layer, trip_csv, "utf-8", driverName="CSV", attributes=IDto_delete
+        )
 
-    IDto_delete = [trip_layer.fields().indexOf(field_name) for field_name in lsto_keep]
-    IDto_delete = [index for index in IDto_delete if index != -1]
+        trip_df = pd.read_csv(trip_csv, dtype={"dist_stops": "float"})
 
-    if_remove_single_file(trip_csv)
-    QgsVectorFileWriter.writeAsVectorFormat(
-        trip_layer, trip_csv, "utf-8", driverName="CSV", attributes=IDto_delete
-    )
+        i_row2 = -1
+        i_row = 0
+        while i_row < len(trip_df):
+            line_trip_1st_2nd = str(trip_df.loc[i_row, "layer"])
+            pattern1 = r"^(.*)_"
+            pattern2 = r"(\d+)$"
+            line_trip = re.match(pattern1, line_trip_1st_2nd).group(1)
+            nd2pos = re.search(pattern2, line_trip_1st_2nd).group(1)
+            trip_df.loc[i_row, "seq_stpID"] = str(line_trip) + "_pos" + str(nd2pos)
+            if i_row2 > -1:
+                trip_df.loc[i_row, "shape_dist_traveled"] = (
+                    trip_df.loc[i_row, "dist_stops"]
+                    + trip_df.loc[i_row2, "shape_dist_traveled"]
+                )
+            else:
+                trip_df.loc[i_row, "shape_dist_traveled"] = trip_df.loc[
+                    i_row, "dist_stops"
+                ]
+            i_row2 += 1
+            i_row += 1
 
-    trip_df = pd.read_csv(trip_csv, dtype={"dist_stops": "float"})
-
-    i_row2 = -1
-    i_row = 0
-    while i_row < len(trip_df):
-        line_trip_1st_2nd = str(trip_df.loc[i_row, "layer"])
-        pattern1 = r"^(.*)_"
-        pattern2 = r"(\d+)$"
-        line_trip = re.match(pattern1, line_trip_1st_2nd).group(1)
-        nd2pos = re.search(pattern2, line_trip_1st_2nd).group(1)
-        trip_df.loc[i_row, "seq_stpID"] = str(line_trip) + "_pos" + str(nd2pos)
-        if i_row2 > -1:
-            trip_df.loc[i_row, "shape_dist_traveled"] = (
-                trip_df.loc[i_row, "dist_stops"]
-                + trip_df.loc[i_row2, "shape_dist_traveled"]
-            )
-        else:
-            trip_df.loc[i_row, "shape_dist_traveled"] = trip_df.loc[i_row, "dist_stops"]
-        i_row2 += 1
-        i_row += 1
-
-    if_remove_single_file(trip_csv)
-    trip_df.to_csv(trip_csv, index=False)
+        if_remove_single_file(trip_csv)
+        trip_df.to_csv(trip_csv, index=False)
 
 
 def move_OSMstops_on_the_road(
@@ -438,40 +462,7 @@ def move_OSMstops_on_the_road(
 
         to_check_layer = QgsVectorLayer(to_check_gpkg, to_check_name, "ogr")
 
-        ls_fields_name_to_remove = ["lon", "lat"]
-
-        for field_name in ls_fields_name_to_remove:
-            field_index = to_check_layer.fields().indexFromName(field_name)
-            if field_index != -1:
-                to_check_layer.startEditing()
-                to_check_layer.deleteAttribute(field_index)
-                to_check_layer.commitChanges()
-            else:
-                print(f"Field '{field_name}' not found.")
-
-        pr = to_check_layer.dataProvider()
-        pr.addAttributes(
-            [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
-        )
-        to_check_layer.updateFields()
-        to_check_layer.commitChanges()
-
-        expression2 = QgsExpression("$x")
-        expression3 = QgsExpression("$y")
-
-        context = QgsExpressionContext()
-        context.appendScopes(
-            QgsExpressionContextUtils.globalProjectLayerScopes(to_check_layer)
-        )
-
-        with edit(to_check_layer):
-            for f in to_check_layer.getFeatures():
-                context.setFeature(f)
-                f["lon"] = expression2.evaluate(context)
-                f["lat"] = expression3.evaluate(context)
-                to_check_layer.updateFeature(f)
-
-        to_check_layer.commitChanges()
+        to_check_layer = recalulate_lon_lat_from_editing(to_check_layer)
 
         if_remove_single_file(to_check_csv)
         virtual_layer_to_csv(to_check_layer, to_check_csv)
@@ -621,7 +612,6 @@ def virtual_layer_to_csv(
 
 
 def save_csv_overwrite_gpkg(name, gpkg, csv):
-    print("starting overwriting the gpkg positions")
     to_check_path = (
         r"file:///{}?crs={}&delimiter={}&xField={}&yField={}&field=trip:integer".format(
             csv, "epsg:4326", ",", "lon", "lat"
@@ -688,3 +678,42 @@ def check_the_off_road_pt_stops(
     )
 
     return to_check
+
+
+def recalulate_lon_lat_from_editing(
+    vector_layer: QgsVectorLayer,
+):
+    ls_fields_name_to_remove = ["lon", "lat"]
+
+    for field_name in ls_fields_name_to_remove:
+        field_index = vector_layer.fields().indexFromName(field_name)
+
+        if field_index != -1:
+            vector_layer.startEditing()
+            vector_layer.deleteAttribute(field_index)
+            vector_layer.commitChanges()
+        else:
+            print(f"Field '{field_name}' not found.")
+
+    pr = vector_layer.dataProvider()
+    pr.addAttributes(
+        [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
+    )
+    vector_layer.updateFields()
+
+    expression2 = QgsExpression("$x")
+    expression3 = QgsExpression("$y")
+
+    context = QgsExpressionContext()
+    context.appendScopes(
+        QgsExpressionContextUtils.globalProjectLayerScopes(vector_layer)
+    )
+
+    with edit(vector_layer):
+        for f in vector_layer.getFeatures():
+            context.setFeature(f)
+            f["lon"] = expression2.evaluate(context)
+            f["lat"] = expression3.evaluate(context)
+            vector_layer.updateFeature(f)
+    vector_layer.commitChanges()
+    return vector_layer
