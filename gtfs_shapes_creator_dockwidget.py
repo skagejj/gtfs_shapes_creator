@@ -85,9 +85,10 @@ from .OSM_PT_routing import (
     check_the_off_road_pt_stops,
     move_OSMstops_on_the_road,
     mini_routing,
-    create_minitrips,
+    defining_minitrips,
     trips,
     virtual_layer_to_csv,
+    recalulate_lon_lat_from_editing,
 )
 
 from .GTFS_shapes_Tracer import (
@@ -1254,46 +1255,16 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         # recalculate the coordinates of the stop position changed
         OSM4rout_layer = QgsVectorLayer(OSM4rout_gpkg, OSM4rout_name, "ogr")
-        ls_fields_name_to_remove = ["lon", "lat"]
 
-        for field_name in ls_fields_name_to_remove:
-            field_index = OSM4rout_layer.fields().indexFromName(field_name)
-
-            if field_index != -1:
-                OSM4rout_layer.startEditing()
-                OSM4rout_layer.deleteAttribute(field_index)
-                OSM4rout_layer.commitChanges()
-            else:
-                print(f"Field '{field_name}' not found.")
-
-        pr = OSM4rout_layer.dataProvider()
-        pr.addAttributes(
-            [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
-        )
-        OSM4rout_layer.updateFields()
-
-        expression2 = QgsExpression("$x")
-        expression3 = QgsExpression("$y")
-
-        context = QgsExpressionContext()
-        context.appendScopes(
-            QgsExpressionContextUtils.globalProjectLayerScopes(OSM4rout_layer)
-        )
-
-        with edit(OSM4rout_layer):
-            for f in OSM4rout_layer.getFeatures():
-                context.setFeature(f)
-                f["lon"] = expression2.evaluate(context)
-                f["lat"] = expression3.evaluate(context)
-                OSM4rout_layer.updateFeature(f)
-        OSM4rout_layer.commitChanges()
+        OSM4rout_layer = recalulate_lon_lat_from_editing(OSM4rout_layer)
 
         if_remove(OSM4rout_csv, files_to_del)
         virtual_layer_to_csv(OSM4rout_layer, OSM4rout_csv)
 
         print("creating mini-trips table")
+
         # create mini trips
-        create_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv)
+        defining_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv)
 
         print("Start routing from start to end for each mini-trip")
         # routing
@@ -1450,8 +1421,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 "lat": "shape_pt_lat",
             }
         )
-        if_remove(shapes_txt)
 
+        if_remove_single_file(shapes_txt)
         shapes.to_csv(shapes_txt, index=False)
 
         Ttbls = pd.read_csv(Ttlbs_txt)
@@ -1553,11 +1524,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         files_to_delete_next_bus_loading_json = (
             str(agencies_folder) + "/temp/files_to_delete_next_bus_loading.json"
         )
-        if os.path.exists(files_to_delete_next_bus_loading_json):
-            with open(files_to_delete_next_bus_loading_json, "r") as f:
-                files_to_del = json.load(f)
-        else:
-            files_to_del = {"path": []}
+
+        files_to_del = load_files_to_del(agencies_folder)
 
         lines_df_csv = os.path.join(str(agencies_folder), "lines_files_list.csv")
 
@@ -1596,14 +1564,19 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             uq_mn_trips = pd.read_csv(uq_mn_trips_csv)
 
         ls_files = lines_df.columns
+        print(
+            f"deleting all transport with line_name as {line_name} from the uq_mini_trip file and files"
+        )
 
         for line_name in ls_lines_names:
             if os.path.exists(uq_mn_trips_csv):
                 i_row = 0
+                ls_row_to_drop = []
                 while i_row < len(uq_mn_trips):
                     if line_name in str(uq_mn_trips.loc[i_row, "mini_tr_path"]):
-                        uq_mn_trips = uq_mn_trips.drop(i_row)
+                        ls_row_to_drop.append(i_row)
                     i_row += 1
+                uq_mn_trips = uq_mn_trips.drop(ls_row_to_drop)
                 uq_mn_trips = uq_mn_trips.reset_index(drop=True)
             for file in ls_files:
                 try:
