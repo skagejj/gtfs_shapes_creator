@@ -227,7 +227,7 @@ def mini_routing(
 
             tot, i_row, n_minitr = count_time_left_2(tm0, total, tot, i_row, n_minitr)
         if_remove_single_file(unique_mini_tr_csv)
-        unique_mini_tr.to_csv(unique_mini_tr_csv, index=False)
+        unique_mini_tr.to_csv(unique_mini_tr_csv)
 
 
 def mini_routing_finally(
@@ -241,6 +241,8 @@ def mini_routing_finally(
     end_point,
     mini_trip_gpkg,
 ):
+    # ref_rail_network = {"Tram":tram_rails_gpgk,"RegRailServ": OSM_Regtrain_gpkg, "Funicular":OSM_funicular_gpkg}
+
     if "Tram" in str(mini_trips.loc[i_row, "line_name"]):
         if_remove_single_file(mini_trip_gpkg)
         mini_routing_for_rail(tram_rails_gpgk, start_point, end_point, mini_trip_gpkg)
@@ -263,9 +265,10 @@ def mini_routing_finally(
         )
 
     else:
+        temp_path = temporary_clip_r_network(full_roads_gpgk, start_point, end_point)
         if_remove_single_file(mini_trip_gpkg)
         params = {
-            "INPUT": full_roads_gpgk,
+            "INPUT": temp_path,
             "STRATEGY": 1,
             "DIRECTION_FIELD": "oneway_routing",
             "VALUE_FORWARD": "forward",
@@ -280,11 +283,13 @@ def mini_routing_finally(
             "OUTPUT": mini_trip_gpkg,
         }
         processing.run("native:shortestpathpointtopoint", params)
+        os.remove(temp_path)
 
 
 def mini_routing_for_rail(rail_network_gpkg, start_point, end_point, mini_trip_gpkg):
+    temp_path = temporary_clip_r_network(rail_network_gpkg, start_point, end_point)
     params = {
-        "INPUT": rail_network_gpkg,
+        "INPUT": temp_path,
         "STRATEGY": 0,
         "DIRECTION_FIELD": "",
         "VALUE_FORWARD": "",
@@ -299,6 +304,35 @@ def mini_routing_for_rail(rail_network_gpkg, start_point, end_point, mini_trip_g
         "OUTPUT": mini_trip_gpkg,
     }
     processing.run("native:shortestpathpointtopoint", params)
+    os.remove(temp_path)
+
+
+def temporary_clip_r_network(r_network_gpkg, start_point, end_point):
+    lon_start, lat_start = float(start_point.split(",")[0]), float(
+        start_point.split(",")[1].split(" ")[0]
+    )
+    lon_end, lat_end = float(end_point.split(",")[0]), float(
+        end_point.split(",")[1].split(" ")[0]
+    )
+
+    margin_clip = 0.01
+
+    est, south, west, north = (
+        min(lon_end, lon_start) - margin_clip,
+        min(lat_end, lat_start) - margin_clip,
+        max(lon_end, lon_start) + margin_clip,
+        max(lat_end, lat_start) + margin_clip,
+    )
+    extent = f"{est},{west},{south},{north} [EPSG:4326]"
+    params = {
+        "INPUT": r_network_gpkg,
+        "EXTENT": extent,
+        "OPTIONS": "",
+        "OUTPUT": "TEMPORARY_OUTPUT",
+    }
+    result: dict = processing.run("gdal:clipvectorbyextent", params)
+    temp_path = result["OUTPUT"]
+    return temp_path
 
 
 def generate_start_end_points_for_ID(mini_trips, i_row):
