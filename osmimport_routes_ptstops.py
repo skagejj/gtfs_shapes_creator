@@ -18,7 +18,7 @@ from qgis.core import (
     QgsRasterLayer,
 )
 from qgis.utils import iface
-from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtCore import QMetaType
 import pandas as pd
 import re
 import numpy as np
@@ -216,8 +216,8 @@ def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg, OSM_roads_gpkg, highway_speed_
     pr = bus_lanes_layer.dataProvider()
     pr.addAttributes(
         [
-            QgsField("oneway_routing", QVariant.String),
-            QgsField("maxspeed_routing", QVariant.Int),
+            QgsField("oneway_routing", QMetaType.String),
+            QgsField("maxspeed_routing", QMetaType.Int),
         ]
     )
     bus_lanes_layer.updateFields()
@@ -274,8 +274,8 @@ def full_city_roads(
     pr = road_layer.dataProvider()
     pr.addAttributes(
         [
-            QgsField("oneway_routing", QVariant.String),
-            QgsField("maxspeed_routing", QVariant.Int),
+            QgsField("oneway_routing", QMetaType.String),
+            QgsField("maxspeed_routing", QMetaType.Int),
         ]
     )
     road_layer.updateFields()
@@ -397,7 +397,7 @@ def time_tables_perTransport(rt, Ttbls, tempfldr, lstrnsprt):
     i_row = 0
     while i_row < len(Ttbl):
         stop_id = str(Ttbl.loc[i_row, "stop_id"])
-        if re.search("[0-9]+\:", stop_id):
+        if re.search(r"[0-9]+:", stop_id):
             Ttbl.loc[i_row, "stp_pltfrm"] = str(re.search(pattern, stop_id).group())
         else:
             Ttbl.loc[i_row, "stp_pltfrm"] = ""
@@ -636,7 +636,7 @@ def preapare_GTFSstops_by_transport(
     i_row = 0
     while i_row < len(most_freq_stps):
         stop_id = str(most_freq_stps.loc[i_row, "stop_id"])
-        if re.search("[0-9]+\:", stop_id):
+        if re.search(r"[0-9]+:", stop_id):
             most_freq_stps.loc[i_row, "stp_pltfrm"] = str(
                 re.search(pattern, stop_id).group()
             )
@@ -793,7 +793,7 @@ def angles_tram(
     # expression to calculate angle_at_vertex($geometry,0)
     splt_roads = QgsVectorLayer(spl_file, "Spl_" + str(trnsprt) + "_rail", "ogr")
     pr = splt_roads.dataProvider()
-    pr.addAttributes([QgsField("stp_angl", QVariant.Double)])
+    pr.addAttributes([QgsField("stp_angl", QMetaType.Double)])
     splt_roads.updateFields
 
     expression = QgsExpression("angle_at_vertex($geometry,0)")
@@ -890,7 +890,7 @@ def angles_buses(
     # expression to calculate angle_at_vertex($geometry,0)
     splt_roads = QgsVectorLayer(spl_file, "Spl_" + str(trnsprt) + "_roads", "ogr")
     pr = splt_roads.dataProvider()
-    pr.addAttributes([QgsField("stp_angl", QVariant.Double)])
+    pr.addAttributes([QgsField("stp_angl", QMetaType.Double)])
     splt_roads.updateFields
 
     expression = QgsExpression("angle_at_vertex($geometry,0)")
@@ -985,10 +985,10 @@ def rectangles_sidewalk(
     pr = GTFS_angl.dataProvider()
     pr.addAttributes(
         [
-            QgsField("rect_angle", QVariant.Double),
-            QgsField("rect_x2", QVariant.Double),
-            QgsField("rect_y2", QVariant.Double),
-            QgsField("rect_type", QVariant.String),
+            QgsField("rect_angle", QMetaType.Double),
+            QgsField("rect_x2", QMetaType.Double),
+            QgsField("rect_y2", QMetaType.Double),
+            QgsField("rect_type", QMetaType.String),
         ]
     )
     GTFS_angl.updateFields()
@@ -1090,7 +1090,7 @@ def rectangles_OSMonROADline(
         GTFSstps_rect_OSMonROADline_gpkg, "rects_OSMonROADline_" + str(line), "ogr"
     )
     pr = vlayer.dataProvider()
-    pr.addAttributes([QgsField("rect_type", QVariant.String)])
+    pr.addAttributes([QgsField("rect_type", QMetaType.String)])
     vlayer.updateFields()
 
     context = QgsExpressionContext()
@@ -1181,7 +1181,7 @@ def OSM_PTstps_dwnld(
             'Overpass API request failed for "server replied Gateway Timeout" -> (skipped)'
         )
         schema = QgsFields()
-        schema.append(QgsField("id", QVariant.Int))
+        schema.append(QgsField("id", QMetaType.Int))
 
         crs = QgsCoordinateReferenceSystem("epsg:4326")
         options = QgsVectorFileWriter.SaveVectorOptions()
@@ -1224,7 +1224,7 @@ def OSMintersecGTFS(rectangles, OSMgpkg, tempOSMfolder, line):
     # adding coordinates in the attribute tables for the OSMlayer
     pr = OSMlayer.dataProvider()
     pr.addAttributes(
-        [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
+        [QgsField("lon", QMetaType.Double), QgsField("lat", QMetaType.Double)]
     )
     OSMlayer.updateFields()
 
@@ -1379,7 +1379,7 @@ def stp_posGTFSnm_rect(
     )
 
     pr = GTFS_posangl.dataProvider()
-    pr.addAttributes([QgsField("pos_angl", QVariant.Double)])
+    pr.addAttributes([QgsField("pos_angl", QMetaType.Double)])
     GTFS_posangl.updateFields()
 
     expression1 = QgsExpression(
@@ -1707,10 +1707,15 @@ def display_OSM_and_SWISSTOPO_IMAGE_maps():
         QgsProject.instance().addMapLayer(OSMmap_layer)
 
 
-def if_display(file_path, layer_name):
+def if_display_r_layer(
+    file_path,
+    layer_name,
+):
     if os.path.exists(file_path):
         if not QgsProject.instance().mapLayersByName(layer_name):
             city_r_layer = QgsVectorLayer(file_path, layer_name, "ogr")
+            symbol = city_r_layer.renderer().symbol()
+            symbol.setWidth(0.35)
             QgsProject.instance().addMapLayer(city_r_layer)
 
 

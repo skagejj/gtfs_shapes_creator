@@ -14,7 +14,7 @@ from qgis.core import (
 
 import pandas as pd
 from qgis import processing
-from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtCore import QMetaType
 import re
 import os
 import time
@@ -420,7 +420,7 @@ def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
         trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
 
         pr = trip_layer.dataProvider()
-        pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
+        pr.addAttributes([QgsField("dist_stops", QMetaType.Double)])
         trip_layer.updateFields()
 
         expression1 = QgsExpression("$length")
@@ -731,7 +731,7 @@ def recalulate_lon_lat_from_editing(
 
     pr = vector_layer.dataProvider()
     pr.addAttributes(
-        [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
+        [QgsField("lon", QMetaType.Double), QgsField("lat", QMetaType.Double)]
     )
     vector_layer.updateFields()
 
