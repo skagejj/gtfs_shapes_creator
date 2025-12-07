@@ -10,7 +10,7 @@ from qgis.core import (
 
 import pandas as pd
 from qgis import processing
-from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtCore import QMetaType
 import re
 import os
 import numpy as np
@@ -59,9 +59,9 @@ def shp_dst_trvl(lines_trips_csv, trip_gpkg, trip_name):
     else:
         print("Field dist_stops not found for " + str(trip_name))
 
-        # ,QgsField("nd2pos", QVariant.Int)
+        # ,QgsField("nd2pos", QMetaType.Int)
     pr = trip_layer.dataProvider()
-    pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
+    pr.addAttributes([QgsField("dist_stops", QMetaType.Double)])
     trip_layer.updateFields()
 
     expression1 = QgsExpression("$length")
@@ -122,9 +122,9 @@ def shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg):
     pr = trip_vertex_layer.dataProvider()
     pr.addAttributes(
         [
-            QgsField("lon", QVariant.Double),
-            QgsField("lat", QVariant.Double),
-            QgsField("line_trip", QVariant.String),
+            QgsField("lon", QMetaType.Double),
+            QgsField("lat", QMetaType.Double),
+            QgsField("line_trip", QMetaType.String),
         ]
     )
     trip_vertex_layer.updateFields()

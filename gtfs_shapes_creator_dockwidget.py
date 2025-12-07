@@ -71,7 +71,7 @@ from .osmimport_routes_ptstops import (
     angle_onRD_sidewalk,
     shape_assignement,
     if_not_make,
-    if_display,
+    if_display_r_layer,
     load_files_to_del,
     if_remove,
     add_filepath_to_lines_csv,
@@ -108,7 +108,7 @@ import datetime
 from .resources import *
 
 import webbrowser
-from PyQt5.QtCore import QVariant
+from PyQt5.QtCore import QMetaType
 from qgis.PyQt.QtWidgets import QListWidgetItem
 
 FORM_CLASS, _ = uic.loadUiType(
@@ -835,8 +835,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     f"{layerType}?crs={crs}", "New Empty Layer", "memory"
                 )
                 fields = QgsFields()
-                fields.append(QgsField("fid", QVariant.Int))
-                fields.append(QgsField("line_name", QVariant.String))
+                fields.append(QgsField("fid", QMetaType.Int))
+                fields.append(QgsField("line_name", QMetaType.String))
                 emptyLayer.startEditing()
                 emptyLayer.dataProvider().addAttributes(fields.toList())
                 emptyLayer.updateFields()
@@ -1111,13 +1111,13 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             display_OSM_and_SWISSTOPO_IMAGE_maps()
 
-            if_display(OSM_roads_gpkg, city_roads_name)
+            if_display_r_layer(OSM_roads_gpkg, city_roads_name)
 
-            if_display(OSM_rails_gpkg, city_rails_name)
+            if_display_r_layer(OSM_rails_gpkg, city_rails_name)
 
-            if_display(OSM_Regtrain_gpkg, city_Regtrain_name)
+            if_display_r_layer(OSM_Regtrain_gpkg, city_Regtrain_name)
 
-            if_display(OSM_funicular_gpkg, city_funicular_name)
+            if_display_r_layer(OSM_funicular_gpkg, city_funicular_name)
 
             display_all_OSM4routing_trips_stops(
                 temp_OSM_for_routing, ls_buses_selected, lines_df
@@ -1280,6 +1280,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         lines_trips = pd.read_csv(lines_trips_csv)
         display_OSM_and_SWISSTOPO_IMAGE_maps()
+        if_display_r_layer(full_roads_gpgk, full_roads_name)
+
+        if_display_r_layer(tram_rails_gpgk, tram_rails_name)
+
+        if_display_r_layer(OSM_Regtrain_gpkg, OSM_Regtrain_name)
+
+        if_display_r_layer(OSM_funicular_gpkg, OSM_funicular_name)
+
         print("now it makes one file for each trip, it will take shorter time")
         takeoff_ = lambda a: "".join([x for x in list(a) if x != "_"])
         ls_selected_line_names = [takeoff_(x) for x in ls_buses_selected]
@@ -1298,6 +1306,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if [x for x in ls_selected_line_names if x in trip]:
                 if not QgsProject.instance().mapLayersByName(str(trip)):
                     trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
+                    symbol = trip_layer.renderer().symbol()
+                    symbol.setWidth(0.9)
                     QgsProject.instance().addMapLayer(trip_layer)
             idx += 1
 
@@ -1628,16 +1638,41 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         agencies_folder, outputspath = generate_agencies_gtfs(
             gtfs_folder_path, selected_agencies, count_all_agencies
         )
+        temp_folder = "OSM_data"
+        road_temp_folder = os.path.join(agencies_folder, temp_folder)
+
+        full_roads_name = "full_city_roads"
+        full_roads_gpgk = str(road_temp_folder) + "/" + str(full_roads_name) + ".gpkg"
+
+        tram_rails_name = "OSM_tram"
+        tram_rails_gpgk = str(road_temp_folder) + "/" + str(tram_rails_name) + ".gpkg"
+
+        OSM_Regtrain_name = "OSM_Regtrain"
+        OSM_Regtrain_gpkg = (
+            str(road_temp_folder) + "/" + str(OSM_Regtrain_name) + ".gpkg"
+        )
+
+        OSM_funicular_name = "OSM_funicular"
+        OSM_funicular_gpkg = (
+            str(road_temp_folder) + "/" + str(OSM_funicular_name) + ".gpkg"
+        )
 
         selected_items = self.tripsListWidget.selectedItems()
         ls_to_disp = [item.text() for item in selected_items]
 
         display_OSM_and_SWISSTOPO_IMAGE_maps()
 
+        if_display_r_layer(full_roads_gpgk, full_roads_name)
+        if_display_r_layer(tram_rails_gpgk, tram_rails_name)
+        if_display_r_layer(OSM_Regtrain_gpkg, OSM_Regtrain_name)
+        if_display_r_layer(OSM_funicular_gpkg, OSM_funicular_name)
+
         for trip in ls_to_disp:
             if not QgsProject.instance().mapLayersByName(str(trip[:-5])):
                 trip_gpkg = str(outputspath) + "/" + str(trip)
                 tirp_layer = QgsVectorLayer(trip_gpkg, str(trip[:-5]), "ogr")
+                symbol = tirp_layer.renderer().symbol()
+                symbol.setWidth(0.9)
                 QgsProject.instance().addMapLayer(tirp_layer)
 
     def closeEvent(self, event):
