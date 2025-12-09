@@ -504,5 +504,21 @@ the final GTFS .zip file !</string>
     </hint>
    </hints>
   </connection>
+  <connection>
+   <sender>mGtfsFolderWidget</sender>
+   <signal>fileChanged(QString)</signal>
+   <receiver>updateAgenciesButton</receiver>
+   <slot>click()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>163</x>
+     <y>106</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>170</x>
+     <y>177</y>
+    </hint>
+   </hints>
+  </connection>
  </connections>
 </ui>
