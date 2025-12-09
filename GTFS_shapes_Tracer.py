@@ -15,7 +15,10 @@ import re
 import os
 import numpy as np
 
-from .OSM_PT_routing import if_remove_single_file
+from .OSM_PT_routing import (
+    if_remove_single_file,
+    vector_layer_to_csv,
+)
 
 
 def update_trips_list(outputspath):
@@ -79,13 +82,8 @@ def shp_dst_trvl(lines_trips_csv, trip_gpkg, trip_name):
 
     lsto_keep = ["layer", "dist_stops"]
 
-    IDto_delete = [trip_layer.fields().indexOf(field_name) for field_name in lsto_keep]
-    IDto_delete = [index for index in IDto_delete if index != -1]
-
     if_remove_single_file(trip_csv)
-    QgsVectorFileWriter.writeAsVectorFormat(
-        trip_layer, trip_csv, "utf-8", driverName="CSV", attributes=IDto_delete
-    )
+    vector_layer_to_csv(trip_layer, trip_csv, fields_to_keep=lsto_keep)
 
     trip_df = pd.read_csv(trip_csv, dtype={"dist_stops": "float"})
 
@@ -124,7 +122,7 @@ def shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg):
         [
             QgsField("lon", QMetaType.Double),
             QgsField("lat", QMetaType.Double),
-            QgsField("line_trip", QMetaType.String),
+            QgsField("line_trip", QMetaType.QString),
         ]
     )
     trip_vertex_layer.updateFields()
@@ -149,15 +147,8 @@ def shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg):
 
     lstokeep = ["fid", "line_trip", "lon", "lat"]
 
-    idtokeep = [
-        trip_vertex_layer.fields().indexOf(field_name) for field_name in lstokeep
-    ]
-    idtokeep = [index for index in idtokeep if index != -1]
-
     if_remove_single_file(shape_csv)
-    QgsVectorFileWriter.writeAsVectorFormat(
-        trip_vertex_layer, shape_csv, "utf-8", driverName="CSV", attributes=idtokeep
-    )
+    vector_layer_to_csv(trip_vertex_layer, shape_csv, fields_to_keep=lstokeep)
 
     trip = pd.read_csv(shape_csv, dtype={"fid": "int"})
     i_row = 0
@@ -300,14 +291,13 @@ def stop_times_update(
     processing.run("native:selectbylocation", params)
 
     selected_csv = str(temp_folder_linestrip) + "/" + str(trip_name) + "_OSMways.csv"
-    QgsVectorFileWriter.writeAsVectorFormat(
+    vector_layer_to_csv(
         city_roads_layer,
         selected_csv,
-        "utf-8",
-        driverName="CSV",
-        onlySelected=True,
-        attributes=[1, 2],
+        seletedFeatures=True,
+        fields_to_keep=["full_id", "osm_id"],
     )
+
     selected = pd.read_csv(selected_csv)
     ls_OSMways = selected.full_id.unique()
 

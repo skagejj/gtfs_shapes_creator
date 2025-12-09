@@ -1,5 +1,3 @@
-# this is where I try to stock all the def of the main OSM_PT_routing.py funcitons
-
 from qgis.core import (
     QgsVectorLayer,
     QgsCoordinateReferenceSystem,
@@ -52,21 +50,17 @@ def save_and_stop_editing_layers(layers):
 
 # Debugging the changing in field type in some step before
 def defining_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv):
-    OSM4rout_unsorted = pd.read_csv(
-        OSM4rout_csv, dtype={"trip": int, "pos": int, "stop_id": str}
+
+    OSM4rout_unsorted = pd.read_csv(OSM4rout_csv, dtype=str)
+
+    # Convert pos safely
+    OSM4rout_unsorted["pos"] = (
+        OSM4rout_unsorted["pos"].replace({"true": 1, "false": 0}).astype("int64")
+    )
+    OSM4rout_unsorted["trip"] = (
+        OSM4rout_unsorted["trip"].replace({"true": 1, "false": 0}).astype("int64")
     )
 
-    # Debugging the changing in field type in some step before
-    if OSM4rout_unsorted.dtypes.pos == "object":
-        i_row = 0
-        while i_row < len(OSM4rout_unsorted):
-            if OSM4rout_unsorted.loc[i_row, "pos"] == "true":
-                OSM4rout_unsorted.loc[i_row, "pos"] = 1
-            if OSM4rout_unsorted.loc[i_row, "pos"] == "false":
-                OSM4rout_unsorted.loc[i_row, "pos"] = 0
-            i_row += 1
-
-    OSM4rout_unsorted = OSM4rout_unsorted.astype({"pos": "int64", "trip": "int64"})
     OSM4rout = OSM4rout_unsorted.sort_values(["line_name", "trip", "pos"]).reset_index(
         drop=True
     )
@@ -100,14 +94,19 @@ def defining_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv):
         i_row += 1
         i_row2 += 1
 
-    OSM4routing = OSM4rout[~OSM4rout["next_lon"].isna()]
+    OSM4rout_without_nan = OSM4rout[OSM4rout["next_lon"] != "nan"]
+    OSM4routing = OSM4rout_without_nan[~OSM4rout_without_nan["next_lon"].isna()]
 
     # creating dataframe for the lines for the specifc trips
     ls_lines_trips = OSM4routing.line_trip.unique()
     lines_trips = pd.DataFrame(ls_lines_trips)
     lines_trips = lines_trips.rename(columns={0: "line_trip"})
-    pattern = re.compile(r"(?:Bus|RegRailServ|Tram|Funicular|trnsprt)([A-Za-z0-9+]+)_")
-    pattern2 = re.compile(r"^(Bus|RegRailServ|Tram|Funicular|transport)(.*)_[^_]+$")
+    pattern = re.compile(
+        r"(?:Bus|RegRailServ|Tram|Funicular|trnsprt|transport)([A-Za-z0-9+]+)_"
+    )
+    pattern2 = re.compile(
+        r"^(Bus|RegRailServ|Tram|Funicular|transport|trnsprt)(.*)_[^_]+$"
+    )
     trip_number_pattern = re.compile(r"_trip(\d+)$")
 
     for idx in lines_trips.index:
@@ -136,7 +135,6 @@ def mini_routing(
     OSM_Regtrain_gpkg,
     OSM_funicular_gpkg,
     temp_folder_minitrip,
-    trnsprt_shapes,
 ):
     mini_trips_unsorted = pd.read_csv(
         OSM4routing_csv, dtype={"trip": int, "pos": int, "stop_id": str}
@@ -168,7 +166,8 @@ def mini_routing(
         if os.path.exists(unique_mini_tr_csv):
             unique_mini_tr = pd.read_csv(unique_mini_tr_csv, index_col="IDstr_end_pt")
         else:
-            unique_mini_tr = pd.DataFrame()
+            unique_mini_tr = pd.DataFrame(columns=["mini_tr_path"])
+            unique_mini_tr.index.name = "IDstr_end_pt"
 
         while i_row < len(mini_trips):
             start_point, end_point = generate_start_end_points_for_ID(mini_trips, i_row)
@@ -241,7 +240,6 @@ def mini_routing_finally(
     end_point,
     mini_trip_gpkg,
 ):
-    # ref_rail_network = {"Tram":tram_rails_gpgk,"RegRailServ": OSM_Regtrain_gpkg, "Funicular":OSM_funicular_gpkg}
 
     if "Tram" in str(mini_trips.loc[i_row, "line_name"]):
         if_remove_single_file(mini_trip_gpkg)
@@ -446,6 +444,7 @@ def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
         IDto_delete = [index for index in IDto_delete if index != -1]
 
         if_remove_single_file(trip_csv)
+
         QgsVectorFileWriter.writeAsVectorFormat(
             trip_layer, trip_csv, "utf-8", driverName="CSV", attributes=IDto_delete
         )
@@ -499,7 +498,7 @@ def move_OSMstops_on_the_road(
         to_check_layer = recalulate_lon_lat_from_editing(to_check_layer)
 
         if_remove_single_file(to_check_csv)
-        virtual_layer_to_csv(to_check_layer, to_check_csv)
+        vector_layer_to_csv(to_check_layer, to_check_csv)
 
         param = {
             "INPUT": to_check_layer,
@@ -525,15 +524,10 @@ def move_OSMstops_on_the_road(
                 nmRD_temp_folder, str(to_check_name) + "_new_pos1.csv"
             )
 
-            virtual_layer_to_csv(to_check_layer, nmRD_stops_csv, seletedFeatures=True)
+            vector_layer_to_csv(to_check_layer, nmRD_stops_csv, seletedFeatures=True)
 
-            QgsVectorFileWriter.writeAsVectorFormat(
-                to_check_layer,
-                OSM_off_road_gpkg,
-                "utf-8",
-                to_check_layer.crs(),
-                driverName="GPKG",
-                onlySelected=True,
+            vector_layer_to_gpkg(
+                to_check_layer, to_check_name, OSM_off_road_gpkg, seleted_features=True
             )
 
             nmRD_stops = pd.read_csv(
@@ -559,7 +553,7 @@ def move_OSMstops_on_the_road(
             OSM_new_pos_layer = QgsVectorLayer(
                 OSM_new_pos_gpkg, to_check_name + "_OSM_off_road", "ogr"
             )
-            virtual_layer_to_csv(OSM_new_pos_layer, OSM_new_pos_csv)
+            vector_layer_to_csv(OSM_new_pos_layer, OSM_new_pos_csv)
 
             OSM_new_pos_df = pd.read_csv(
                 OSM_new_pos_csv,
@@ -631,18 +625,25 @@ def move_OSMstops_on_the_road(
             save_csv_overwrite_gpkg(to_check_name, to_check_gpkg, to_check_csv)
 
 
-def virtual_layer_to_csv(
-    virtual_layer: QgsVectorLayer, csv_path, seletedFeatures: bool = False
+def vector_layer_to_csv(
+    vector_layer: QgsVectorLayer,
+    csv_path,
+    seletedFeatures: bool = False,
+    fields_to_keep: list = [],
 ):
     save_options = QgsVectorFileWriter.SaveVectorOptions()
     save_options.driverName = "csv"
     save_options.fileEncoding = "utf-8"
     save_options.onlySelectedFeatures = seletedFeatures
-    layer_context = virtual_layer.transformContext()
+    layer_context = vector_layer.transformContext()
     coordinates = QgsCoordinateTransformContext(layer_context)
     QgsVectorFileWriter.writeAsVectorFormatV3(
-        virtual_layer, csv_path, coordinates, save_options
+        vector_layer, csv_path, coordinates, save_options
     )
+    if fields_to_keep:
+        df = pd.read_csv(csv_path, dtype=str)
+        if_remove_single_file(csv_path)
+        df[fields_to_keep].to_csv(csv_path, index=False)
 
 
 def save_csv_overwrite_gpkg(name, gpkg, csv):
@@ -651,14 +652,13 @@ def save_csv_overwrite_gpkg(name, gpkg, csv):
             csv, "epsg:4326", ",", "lon", "lat"
         )
     )
+    new_OSM_pos_layer = QgsVectorLayer(to_check_path, name, "delimitedtext")
+    layer_context = new_OSM_pos_layer.transformContext()
+    coordinates = QgsCoordinateTransformContext(layer_context)
     save_options = QgsVectorFileWriter.SaveVectorOptions()
     save_options.driverName = "gpkg"
     save_options.fileEncoding = "utf-8"
     save_options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteFile
-
-    new_OSM_pos_layer = QgsVectorLayer(to_check_path, name, "delimitedtext")
-    layer_context = new_OSM_pos_layer.transformContext()
-    coordinates = QgsCoordinateTransformContext(layer_context)
     QgsVectorFileWriter.writeAsVectorFormatV3(
         new_OSM_pos_layer, gpkg, coordinates, save_options
     )
@@ -705,7 +705,7 @@ def check_the_off_road_pt_stops(
 
     allstops_layer.invertSelection()
 
-    virtual_layer_to_csv(allstops_layer, nmRD_stops_csv, seletedFeatures=True)
+    vector_layer_to_csv(allstops_layer, nmRD_stops_csv, seletedFeatures=True)
 
     to_check = pd.read_csv(
         nmRD_stops_csv, dtype={"trip": int, "pos": int, "stop_id": str}
@@ -751,3 +751,17 @@ def recalulate_lon_lat_from_editing(
             vector_layer.updateFeature(f)
     vector_layer.commitChanges()
     return vector_layer
+
+
+def vector_layer_to_gpkg(vector_layer, layer_name, gpkg, seleted_features=False):
+    layer_context = vector_layer.transformContext()
+    coordinates = QgsCoordinateTransformContext(layer_context)
+    save_options = QgsVectorFileWriter.SaveVectorOptions()
+    save_options.driverName = "gpkg"
+    save_options.layerName = layer_name
+    save_options.fileEncoding = "utf-8"
+    save_options.onlySelectedFeatures = seleted_features
+    save_options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteFile
+    QgsVectorFileWriter.writeAsVectorFormatV3(
+        vector_layer, gpkg, coordinates, save_options
+    )

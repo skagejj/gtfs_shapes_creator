@@ -29,13 +29,12 @@ import math
 import statistics as stat
 import time
 import datetime
-from .OSM_PT_routing import if_remove_single_file, virtual_layer_to_csv
+from .OSM_PT_routing import if_remove_single_file, vector_layer_to_csv
 
 
 def if_not_make(folders_to_make: list):
     for folder in folders_to_make:
-        if not os.path.exists(folder):
-            os.makedirs(folder)
+        os.makedirs(folder, exist_ok=True)
 
 
 def load_files_to_del(agencies_folder):
@@ -201,7 +200,13 @@ def highway_average_speed(OSM_roads_csv, highway_speed_csv):
     highway_speed.to_csv(highway_speed_csv, index=False)
 
 
-def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg, OSM_roads_gpkg, highway_speed_csv):
+def busroutes(
+    bus_lanes_name,
+    OSM_bus_lanes_gpkg,
+    OSM_bus_lanes_csv,
+    OSM_roads_gpkg,
+    highway_speed_csv,
+):
 
     # extract bus lanes in a gpkg
     bus_lanes_selection = '"bus" is not NULL OR "bus:lanes" is not NULL OR "bus:lanes:backward" is not NULL OR "bus:lanes:forward" is not NULL OR "busway" is not NULL OR "busway:left" is not NULL OR "busway:left" is not NULL   OR "busway:right" is not NULL OR "busway:right" is not NULL   OR "hgv" is not NULL OR "hgv:lanes" is not NULL OR "lanes:bus" is not NULL OR "lanes:bus:backward" is not NULL OR "lanes:bus:forward" is not NULL OR "lanes:psv" is not NULL   OR "lanes:psv:forward" is not NULL   OR "maxheight:physical" is not NULL   OR "oneway:bus" is not NULL   OR "oneway:psv" is not NULL   OR "trolley_wire" is not NULL   OR "trolleybus" is not NULL   OR "tourist_bus:lanes" is not NULL   OR "psv" is not NULL   OR "psv:lanes" is not NULL   OR "highway" is \'busway\' OR "psv:lanes:forward" is not NULL OR "psv:lanes:backward" is not NULL'
@@ -213,111 +218,87 @@ def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg, OSM_roads_gpkg, highway_speed_
     processing.run("native:extractbyexpression", params)
 
     bus_lanes_layer = QgsVectorLayer(OSM_bus_lanes_gpkg, bus_lanes_name, "ogr")
-    pr = bus_lanes_layer.dataProvider()
-    pr.addAttributes(
-        [
-            QgsField("oneway_routing", QMetaType.String),
-            QgsField("maxspeed_routing", QMetaType.Int),
-        ]
-    )
-    bus_lanes_layer.updateFields()
-
-    expression1 = QgsExpression(
-        'IF("bus:lanes:backward" is not NULL OR "busway:left" is not NULL OR "lanes:bus:backward" is not NULL OR "psv:lanes:backward" is not NULL OR "oneway:bus" is \'no\' OR "onewqy:psv" is \'no\', \'backward\',\'forward\')'
-    )
-
     highway_speed = pd.read_csv(highway_speed_csv)
-    condition = 'if("maxspeed" is not NULL AND regexp_match("maxspeed",\'[0-9]+\'), "maxspeed"*\'2\', '
-    brakets = ")"
-    i_row = 0
 
-    while i_row < len(highway_speed):
-        highway_type = highway_speed.loc[i_row, "highway"]
-        speed = int(highway_speed.loc[i_row, "bus_lanes"])
-        to_add = 'if("highway" is \'' + str(highway_type) + "','" + str(speed) + "', "
-        condition = str(condition) + str(to_add)
-        brakets = str(brakets) + ")"
-        i_row += 1
+    vector_layer_to_csv(bus_lanes_layer, OSM_bus_lanes_csv)
+    OSM_bus_lanes_df = pd.read_csv(OSM_bus_lanes_csv, dtype=str)
 
-    condition = str(condition) + "'80' " + str(brakets)
-    expression2 = QgsExpression(condition)
-
-    context = QgsExpressionContext()
-    context.appendScopes(
-        QgsExpressionContextUtils.globalProjectLayerScopes(bus_lanes_layer)
+    all_cols = [
+        "bus:lanes:backward",
+        "lanes:bus:backward",
+        "busway:left",
+        "lanes:bus:backward",
+        "psv:lanes:backward",
+    ]
+    cols_to_check = [col for col in OSM_bus_lanes_df.columns if col in all_cols]
+    condition = (
+        OSM_bus_lanes_df.reindex(columns=cols_to_check).notna().any(axis=1)
+        | (OSM_bus_lanes_df.get("oneway:bus") == "no")
+        | (OSM_bus_lanes_df.get("oneway:psv") == "no")
     )
 
-    with edit(bus_lanes_layer):
-        for f in bus_lanes_layer.getFeatures():
-            context.setFeature(f)
-            f["oneway_routing"] = expression1.evaluate(context)
-            bus_lanes_layer.updateFeature(f)
-    bus_lanes_layer.commitChanges()
+    params = {
+        "if_true": "backward",
+        "if_false": "forward",
+        "multiplicator_speed": 2,
+        "average_speed": "bus_lanes",
+    }
+    OSM_bus_lanes_df = get_oneway_maxspeed_routing_df(
+        highway_speed, OSM_bus_lanes_df, condition, params
+    )
 
-    with edit(bus_lanes_layer):
-        for f in bus_lanes_layer.getFeatures():
-            context.setFeature(f)
-            f["maxspeed_routing"] = expression2.evaluate(context)
-            bus_lanes_layer.updateFeature(f)
-    bus_lanes_layer.commitChanges()
+    joined_vector_layer = join_oneway_maxspeed_routing_to_vl(
+        bus_lanes_layer,
+        OSM_bus_lanes_df,
+        OSM_bus_lanes_csv,
+    )
+
+    vector_layer_to_gpkg(joined_vector_layer, bus_lanes_name, OSM_bus_lanes_gpkg)
+
     print(f"at {datetime.datetime.now()} ending to fill the oneway_routing column")
 
     return OSM_bus_lanes_gpkg, bus_lanes_name
 
 
 def full_city_roads(
-    OSM_roads_gpkg, bus_lanes_gpkg, full_roads_gpgk, city_roads_name, highway_speed_csv
+    OSM_roads_gpkg,
+    OSM_roads_csv,
+    bus_lanes_gpkg,
+    full_roads_gpgk,
+    city_roads_name,
+    highway_speed_csv,
+    bus_lanes_name,
 ):
-
     road_layer = QgsVectorLayer(OSM_roads_gpkg, city_roads_name, "ogr")
 
-    pr = road_layer.dataProvider()
-    pr.addAttributes(
-        [
-            QgsField("oneway_routing", QMetaType.String),
-            QgsField("maxspeed_routing", QMetaType.Int),
-        ]
-    )
-    road_layer.updateFields()
-
-    expression1 = QgsExpression(
-        "IF(\"oneway\" is 'yes' OR \"junction\" is 'roundabout' ,'forward',NULL)"
-    )
-
     highway_speed = pd.read_csv(highway_speed_csv)
-    condition = 'if("maxspeed" is not NULL AND regexp_match("maxspeed",\'[0-9]+\'), "maxspeed", '
-    brakets = ")"
-    i_row = 0
 
-    while i_row < len(highway_speed):
-        highway_type = highway_speed.loc[i_row, "highway"]
-        speed = int(highway_speed.loc[i_row, "average_speed"])
-        to_add = 'if("highway" is \'' + str(highway_type) + "','" + str(speed) + "', "
-        condition = str(condition) + str(to_add)
-        brakets = str(brakets) + ")"
-        i_row += 1
+    OSM_roads_df = pd.read_csv(OSM_roads_csv, dtype=str)
+    condition = (OSM_roads_df["oneway"] == "yes") | (
+        OSM_roads_df["junction"] == "roundabout"
+    )
+    params = {
+        "if_true": "forward",
+        "if_false": None,
+        "multiplicator_speed": 1,
+        "average_speed": "average_speed",
+    }
+    OSM_roads_df = get_oneway_maxspeed_routing_df(
+        highway_speed, OSM_roads_df, condition, params
+    )
 
-    condition = str(condition) + "'40' " + str(brakets)
-    expression2 = QgsExpression(condition)
+    joined_vector_layer = join_oneway_maxspeed_routing_to_vl(
+        road_layer,
+        OSM_roads_df,
+        OSM_roads_csv,
+    )
 
-    context = QgsExpressionContext()
-    context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(road_layer))
+    vector_layer_to_gpkg(joined_vector_layer, city_roads_name, OSM_roads_gpkg)
 
-    with edit(road_layer):
-        for f in road_layer.getFeatures():
-            context.setFeature(f)
-            f["oneway_routing"] = expression1.evaluate(context)
-            road_layer.updateFeature(f)
-    road_layer.commitChanges()
-
-    with edit(road_layer):
-        for f in road_layer.getFeatures():
-            context.setFeature(f)
-            f["maxspeed_routing"] = expression2.evaluate(context)
-            road_layer.updateFeature(f)
-    road_layer.commitChanges()
-
-    ls_roads = [str(OSM_roads_gpkg), str(bus_lanes_gpkg)]
+    ls_roads = [
+        OSM_roads_gpkg + "|layername=" + city_roads_name,
+        bus_lanes_gpkg + "|layername=" + bus_lanes_name,
+    ]
 
     params = {
         "LAYERS": ls_roads,
@@ -325,6 +306,104 @@ def full_city_roads(
         "OUTPUT": full_roads_gpgk,
     }
     processing.run("native:mergevectorlayers", params)
+
+
+def get_oneway_maxspeed_routing_df(highway_speed, OSM_roads_df, condition, params):
+    OSM_roads_df["oneway_routing"] = np.where(
+        condition,
+        params["if_true"],
+        params["if_false"],
+    )
+
+    highway_speed_dict = (
+        highway_speed[["highway", params["average_speed"]]]
+        .set_index("highway")[params["average_speed"]]
+        .to_dict()
+    )
+
+    def maxspeed_routing(row, highway_speed_dict):
+        maxspeed = row["maxspeed"]
+        if str(maxspeed) == "nan":
+            highway = row["highway"]
+            if highway in highway_speed_dict:
+                return highway_speed_dict[highway]
+        if isinstance(maxspeed, (int, float)):
+            return maxspeed * params["multiplicator_speed"]
+        if isinstance(maxspeed, str):
+            digits = re.search(r"[0-9]+", maxspeed)
+            if digits:
+                return int(digits.group()) * params["multiplicator_speed"]
+        return 80
+
+    OSM_roads_df["maxspeed_routing"] = OSM_roads_df.apply(
+        maxspeed_routing, axis=1, highway_speed_dict=highway_speed_dict
+    )
+    return OSM_roads_df
+
+
+def join_oneway_maxspeed_routing_to_vl(
+    vector_layer,
+    df_oneway_maxspeed_routing,
+    oneway_new_speed_csv,
+):
+    df_oneway_maxspeed_routing[
+        ["full_id", "oneway_routing", "maxspeed_routing"]
+    ].to_csv(oneway_new_speed_csv, index=False)
+
+    uri = f"file:///{oneway_new_speed_csv}?type=csv&detectTypes=yes&geomType=none&delimiter=,"
+    join_attributes_layer = QgsVectorLayer(uri, "bl_oneway_new_speed", "delimitedtext")
+
+    result = processing.run(
+        "native:joinattributestable",
+        {
+            "INPUT": vector_layer,
+            "FIELD": "full_id",
+            "INPUT_2": join_attributes_layer,
+            "FIELD_2": "full_id",
+            "FIELDS_TO_COPY": ["oneway_routing", "maxspeed_routing"],
+            "METHOD": 1,  # Take matching only
+            "DISCARD_NONMATCHING": False,
+            "PREFIX": "",
+            "OUTPUT": "memory:",
+        },
+    )
+
+    return result["OUTPUT"]
+
+
+def vector_layer_to_gpkg(
+    vector_layer,
+    layer_name,
+    gpkg,
+    seleted_features=False,
+    fields_to_keep: list = [],
+):
+    if fields_to_keep:
+        IDs_to_keep = [
+            vector_layer.fields().indexFromName(field_name)
+            for field_name in fields_to_keep
+        ]
+        all_IDs = vector_layer.fields().allAttributesList()
+        IDs_to_del = [idx for idx in all_IDs if idx not in IDs_to_keep]
+        if IDs_to_del:
+            for idx in IDs_to_del:
+                vector_layer.startEditing()
+                vector_layer.deleteAttribute(idx)
+                vector_layer.commitChanges()
+            else:
+                print(f"ID Field '{idx}' not found.")
+
+    layer_context = vector_layer.transformContext()
+    coordinates = QgsCoordinateTransformContext(layer_context)
+    save_options = QgsVectorFileWriter.SaveVectorOptions()
+    save_options.driverName = "gpkg"
+    save_options.layerName = layer_name
+    save_options.fileEncoding = "utf-8"
+    save_options.onlySelectedFeatures = seleted_features
+    save_options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteFile
+    QgsVectorFileWriter.writeAsVectorFormatV3(
+        vector_layer, gpkg, coordinates, save_options
+    )
 
 
 def Ttbls_plus(Ttlbs_txt, Ttbls_plus_csv, dwnldfld, trips_txt):
@@ -784,12 +863,6 @@ def angles_tram(
     processing.run("native:multiparttosingleparts", params)
     del params
 
-    # splitting in smaller peaces
-    # params = {'INPUT':str(temp_road_folder)+'/multiL_'+str(trnsprt)+'_swissroad.gpkg',
-    #          'LENGTH':0.00007,
-    #          'OUTPUT':spl_file}
-    # processing.run("native:splitlinesbylength", params)
-
     # expression to calculate angle_at_vertex($geometry,0)
     splt_roads = QgsVectorLayer(spl_file, "Spl_" + str(trnsprt) + "_rail", "ogr")
     pr = splt_roads.dataProvider()
@@ -833,7 +906,7 @@ def angles_tram(
     processing.run("native:joinbynearest", params)
     GTFSnomatchplt = QgsVectorLayer(GTFSnomatchangl, "GTFSnmRD" + str(trnsprt), "ogr")
 
-    virtual_layer_to_csv(GTFSnomatchplt, GTFS_NMangcsv)
+    vector_layer_to_csv(GTFSnomatchplt, GTFS_NMangcsv)
 
     del params, context, expression
     return anglefile, GTFSnomatchangl, GTFS_NMangcsv, spl_file
@@ -881,13 +954,6 @@ def angles_buses(
     processing.run("native:multiparttosingleparts", params)
     del params
 
-    # splitting in smaller peaces
-    # params = {'INPUT':str(temp_road_folder)+'/multiL_'+str(trnsprt)+'_swissroad.gpkg',
-    #          'LENGTH':0.00007,
-    #          'OUTPUT':spl_file}
-    # processing.run("native:splitlinesbylength", params)
-
-    # expression to calculate angle_at_vertex($geometry,0)
     splt_roads = QgsVectorLayer(spl_file, "Spl_" + str(trnsprt) + "_roads", "ogr")
     pr = splt_roads.dataProvider()
     pr.addAttributes([QgsField("stp_angl", QMetaType.Double)])
@@ -930,7 +996,7 @@ def angles_buses(
     processing.run("native:joinbynearest", params)
     GTFSnomatchplt = QgsVectorLayer(GTFSnomatchangl, "GTFSnmRD" + str(trnsprt), "ogr")
 
-    virtual_layer_to_csv(GTFSnomatchplt, GTFS_NMangcsv)
+    vector_layer_to_csv(GTFSnomatchplt, GTFS_NMangcsv)
 
     del params, context, expression
     return anglefile, GTFSnomatchangl, GTFS_NMangcsv, spl_file
@@ -988,7 +1054,7 @@ def rectangles_sidewalk(
             QgsField("rect_angle", QMetaType.Double),
             QgsField("rect_x2", QMetaType.Double),
             QgsField("rect_y2", QMetaType.Double),
-            QgsField("rect_type", QMetaType.String),
+            QgsField("rect_type", QMetaType.QString),
         ]
     )
     GTFS_angl.updateFields()
@@ -1014,7 +1080,7 @@ def rectangles_sidewalk(
 
     del context
 
-    virtual_layer_to_csv(GTFS_angl, GTFSstps_rect_sidewalk_csv)
+    vector_layer_to_csv(GTFS_angl, GTFSstps_rect_sidewalk_csv)
 
     # the QgsExpression function doesn't work with sin() function that works on the QGIS FieldCalculator
     GTFS_angldf = pd.read_csv(GTFSstps_rect_sidewalk_csv)
@@ -1090,7 +1156,7 @@ def rectangles_OSMonROADline(
         GTFSstps_rect_OSMonROADline_gpkg, "rects_OSMonROADline_" + str(line), "ogr"
     )
     pr = vlayer.dataProvider()
-    pr.addAttributes([QgsField("rect_type", QMetaType.String)])
+    pr.addAttributes([QgsField("rect_type", QMetaType.QString)])
     vlayer.updateFields()
 
     context = QgsExpressionContext()
@@ -1293,8 +1359,8 @@ def OSMintersecGTFS(rectangles, OSMgpkg, tempOSMfolder, line):
 
     OSMlayer.invertSelection()
 
-    _writer = QgsVectorFileWriter.writeAsVectorFormat(
-        OSMlayer, OSMnomatchGTFSgpkg, "utf-8", driverName="GPKG", onlySelected=True
+    vector_layer_to_gpkg(
+        OSMlayer, "OSM" + str(line), OSMnomatchGTFSgpkg, seleted_features=True
     )
 
     # - saving tables CSV and loading
@@ -1302,7 +1368,7 @@ def OSMintersecGTFS(rectangles, OSMgpkg, tempOSMfolder, line):
         OSMintersecGTFSgpkg, "OSMintersecGTFS" + str(line), "ogr"
     )
     OSMjoinGTFScsv = str(tempOSMfolder) + "/OSMjoinGTFS_" + str(line) + ".csv"
-    virtual_layer_to_csv(OSMjoinGTFSlayer, OSMjoinGTFScsv)
+    vector_layer_to_csv(OSMjoinGTFSlayer, OSMjoinGTFScsv)
 
     OSMjnGTFS = pd.read_csv(
         OSMjoinGTFScsv, dtype={"GTFS_trip": int, "GTFS_pos": int, "GTFS_stop_id": str}
@@ -1312,7 +1378,7 @@ def OSMintersecGTFS(rectangles, OSMgpkg, tempOSMfolder, line):
         OSMnomatchGTFSgpkg, "OSM" + str(line) + "_NOmatch", "ogr"
     )
     OSMnomatchGTFScsv = str(tempOSMfolder) + "/OSM" + str(line) + "_NOmatch.csv"
-    virtual_layer_to_csv(OSMnomatchGTFSlayer, OSMnomatchGTFScsv)
+    vector_layer_to_csv(OSMnomatchGTFSlayer, OSMnomatchGTFScsv)
 
     OSMnomatch = pd.read_csv(OSMnomatchGTFScsv)
     del params
@@ -1399,9 +1465,7 @@ def stp_posGTFSnm_rect(
     GTFS_posangl.commitChanges()
 
     del context
-    virtual_layer_to_csv(GTFS_posangl, GTFS_nmRCT_pos_CSV1)
-
-    # QgsVectorFileWriter.writeAsVectorFormat(GTFS_posangl,GTFScsv,"utf-8",driverName = "CSV")
+    vector_layer_to_csv(GTFS_posangl, GTFS_nmRCT_pos_CSV1)
 
     # calculate the angle of the new stop_position
     # the QgsExpression function doesn't work with sin() function that works on the QGIS FieldCalculator
@@ -1461,7 +1525,7 @@ def stp_posGTFSnm_rect(
     processing.run("native:joinbynearest", params)
 
     GTFS_pos_layer = QgsVectorLayer(GTFS_pos, "GTFSnmRCT_" + str(line_name), "ogr")
-    virtual_layer_to_csv(GTFS_pos_layer, GTFS_nmRCT_pos_CSV3)
+    vector_layer_to_csv(GTFS_pos_layer, GTFS_nmRCT_pos_CSV3)
 
     GTFS_posdf = pd.read_csv(GTFS_nmRCT_pos_CSV3)
 
@@ -1609,24 +1673,24 @@ def joinNEWandValidOSM(
     OSMstops_tosave = OSMstops_updated.drop(todelete).reset_index(drop=True)
 
     OSMstops_tosave = OSMstops_tosave.drop(["stop_lon", "stop_lat"], axis=1)
-    for trip in ls_trips:
-        OSMstops_trip = OSMstops_tosave[OSMstops_tosave["line_trip"] == trip]
+    for line_trip in ls_trips:
+        OSMstops_trip = OSMstops_tosave[OSMstops_tosave["line_trip"] == line_trip]
+        OSMstops_trip_name = "OSM4routing_" + line_trip
         OSMstops_trip_csv = (
-            str(temp_OSM_for_routing) + "/OSM4routing_" + str(trip) + ".csv"
+            str(temp_OSM_for_routing) + "/" + OSMstops_trip_name + ".csv"
         )
         OSMstops_trip_gpkg = (
-            str(temp_OSM_for_routing) + "/OSM4routing_" + str(trip) + ".gpkg"
+            str(temp_OSM_for_routing) + "/" + OSMstops_trip_name + ".gpkg"
         )
         OSMstops_trip.to_csv(OSMstops_trip_csv, index=False)
         OSM4rout_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}&field=trip:integer".format(
             OSMstops_trip_csv, "EPSG:4326", ",", "lon", "lat"
         )
         OSM4rout_layer = QgsVectorLayer(
-            OSM4rout_path, "OSM_for_routing", "delimitedtext"
+            OSM4rout_path, OSMstops_trip_name, "delimitedtext"
         )
-        QgsVectorFileWriter.writeAsVectorFormat(
-            OSM4rout_layer, OSMstops_trip_gpkg, "UTF-8", OSM4rout_layer.crs(), "GPKG"
-        )
+        vector_layer_to_gpkg(OSM4rout_layer, OSMstops_trip_name, OSMstops_trip_gpkg)
+
         files_to_del = if_remove(OSMstops_trip_csv, files_to_del)
     return files_to_del
 
@@ -1659,6 +1723,7 @@ def transcript_main_files(
     highway_speed_csv,
     bus_lanes_name,
     OSM_bus_lanes_gpkg,
+    OSM_bus_lanes_csv,
     full_roads_name,
     full_roads_gpgk,
     Ttbls_selected_name,
@@ -1673,6 +1738,7 @@ def transcript_main_files(
             OSM_roads_nameCSV,
             highway_speed_name,
             bus_lanes_name,
+            bus_lanes_name + "_csv",
             full_roads_name,
             Ttbls_selected_name,
             files_to_delete_next_bus_loading_name,
@@ -1683,6 +1749,7 @@ def transcript_main_files(
             OSM_roads_csv,
             highway_speed_csv,
             OSM_bus_lanes_gpkg,
+            OSM_bus_lanes_csv,
             full_roads_gpgk,
             Ttbls_selected_txt,
             files_to_delete_next_bus_loading_json,
