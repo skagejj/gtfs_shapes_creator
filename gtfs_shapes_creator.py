@@ -32,7 +32,7 @@ from .resources import *
 # Import the code for the DockWidget
 from .gtfs_shapes_creator_dockwidget import GtfsShapesCreatorDockWidget
 import os.path
-from qgis.core import QgsPointXY
+from qgis.core import Qgis
 
 
 class GtfsShapesCreator:
@@ -48,6 +48,20 @@ class GtfsShapesCreator:
         """
         # Save reference to the QGIS interface
         self.iface = iface
+
+        try:
+            import QuickOSM
+
+            QUICKOSM_OK = True
+        except ImportError:
+            QUICKOSM_OK = False
+            self.iface.messageBar().pushMessage(
+                "Error",
+                self.tr(
+                    "Missing dependency - QuickOSM must be installed and enabled for GTFS 'Shapes Creator' plugin to run."
+                ),
+                level=Qgis.Critical,
+            )
 
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)

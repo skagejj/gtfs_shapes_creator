@@ -33,6 +33,7 @@ from qgis.core import (
     QgsFields,
     QgsField,
     QgsPointXY,
+    Qgis,
 )
 
 from .agency_selection import (
@@ -117,13 +118,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def __init__(self, iface, parent=None):
         """Constructor."""
-        super(GtfsShapesCreatorDockWidget, self).__init__(parent)
+        super().__init__(parent)
         # Set up the user interface from Designer.
         # After setupUI you can access any designer object by doing
         # self.<objectname>, and you can use autoconnect slots - see
         # http://doc.qt.io/qt-5/designer-using-a-ui-file.html
         # #widgets-and-dialogs-with-auto-connect
-
         self.iface = iface
 
         self.setupUi(self)
@@ -205,8 +205,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         return routes, agency_name_fold
 
     def __uploadOSM(self):
-        print(
-            f"at {datetime.datetime.now()} starting the real job: \n - creating agency GTFS folder \n - downloading the OSM rail and road networks  \n - creating the bus network where the bus run faster \n - and only at the end the path for your bus\n... be patient"
+        self.iface.messageBar().pushMessage(
+            f"at {datetime.datetime.now()} starting the real job",
+            level=Qgis.info,
+            duration=20,
         )
         selected_items = self.listBusWidget.selectedItems()
 
@@ -1118,6 +1120,17 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             display_all_OSM4routing_trips_stops(
                 temp_OSM_for_routing, ls_buses_selected, lines_df
             )
+            latitude = (south + north) / 2
+            longitude = (east + west) / 2
+            target_point = QgsPointXY(longitude, latitude)
+
+            canvas = self.iface.mapCanvas()
+
+            canvas.setCenter(target_point)
+
+            canvas.zoomScale(50)
+
+            canvas.refresh()
 
             self.toolBox.setCurrentIndex(2)
         else:
@@ -1302,6 +1315,18 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     symbol.setWidth(0.9)
                     QgsProject.instance().addMapLayer(trip_layer)
             idx += 1
+
+        latitude = (south + north) / 2
+        longitude = (east + west) / 2
+        target_point = QgsPointXY(longitude, latitude)
+
+        canvas = self.iface.mapCanvas()
+
+        canvas.setCenter(target_point)
+
+        canvas.zoomScale(50)
+
+        canvas.refresh()
 
         if_remove_single_file(trips_done_csv)
         ls_gpkg_df.to_csv(trips_done_csv, index=False)
