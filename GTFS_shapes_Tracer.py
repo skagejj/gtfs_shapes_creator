@@ -5,7 +5,6 @@ from qgis.core import (
     QgsExpression,
     QgsExpressionContext,
     QgsExpressionContextUtils,
-    QgsVectorFileWriter,
 )
 
 import pandas as pd
