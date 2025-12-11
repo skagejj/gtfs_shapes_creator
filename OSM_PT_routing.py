@@ -12,10 +12,11 @@ from qgis.core import (
 
 import pandas as pd
 from qgis import processing
-from qgis.PyQt.QtCore import QMetaType
+from qgis.PyQt.QtCore import QVariant
 import re
 import os
 import time
+from urllib.parse import urlencode
 
 
 def if_remove(file_path, files_to_del):
@@ -144,16 +145,19 @@ def mini_routing(
     ).reset_index(drop=True)
 
     ls_files_tempfld = os.listdir(temp_folder_minitrip)
-    ls_with_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
-    ls_mini_tr_gpkg = [
-        file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
-    ]
+    if ls_files_tempfld:
+        ls_with_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
+        ls_mini_tr_gpkg = [
+            file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
+        ]
 
-    ls_mini_trips_done = [file[:-5] for file in ls_mini_tr_gpkg]
+        ls_mini_trips_done = [file[:-5] for file in ls_mini_tr_gpkg]
 
-    mini_trips = mini_trips_to_select[
-        ~mini_trips_to_select.mini_tr_pos.isin(ls_mini_trips_done)
-    ]
+        mini_trips = mini_trips_to_select[
+            ~mini_trips_to_select.mini_tr_pos.isin(ls_mini_trips_done)
+        ]
+    else:
+        mini_trips = mini_trips_to_select
 
     unique_mini_tr_name = "uq_mini_trips"
     unique_mini_tr_csv = os.path.join(
@@ -174,11 +178,9 @@ def mini_routing(
             if start_point == end_point:
                 i_row += 1
                 continue
-            mini_trip_gpkg = (
-                str(temp_folder_minitrip)
-                + "/"
-                + str(mini_trips.loc[i_row, "mini_tr_pos"])
-                + ".gpkg"
+            mini_trip_gpkg = os.path.join(
+                temp_folder_minitrip,
+                str(mini_trips.loc[i_row, "mini_tr_pos"]) + ".gpkg",
             )
 
             IDstr_end_pt = str(start_point) + " " + str(end_point)
@@ -240,6 +242,9 @@ def mini_routing_finally(
     end_point,
     mini_trip_gpkg,
 ):
+    print(f"start point is {start_point}")
+    print(f"end point is {end_point}")
+    print(f"the file path of the result is {mini_trip_gpkg}")
 
     if "Tram" in str(mini_trips.loc[i_row, "line_name"]):
         if_remove_single_file(mini_trip_gpkg)
@@ -281,7 +286,6 @@ def mini_routing_finally(
             "OUTPUT": mini_trip_gpkg,
         }
         processing.run("native:shortestpathpointtopoint", params)
-        os.remove(temp_path)
 
 
 def mini_routing_for_rail(rail_network_gpkg, start_point, end_point, mini_trip_gpkg):
@@ -302,7 +306,6 @@ def mini_routing_for_rail(rail_network_gpkg, start_point, end_point, mini_trip_g
         "OUTPUT": mini_trip_gpkg,
     }
     processing.run("native:shortestpathpointtopoint", params)
-    os.remove(temp_path)
 
 
 def temporary_clip_r_network(r_network_gpkg, start_point, end_point):
@@ -322,15 +325,17 @@ def temporary_clip_r_network(r_network_gpkg, start_point, end_point):
         max(lat_end, lat_start) + margin_clip,
     )
     extent = f"{est},{west},{south},{north} [EPSG:4326]"
+    print(f"the extent is {extent}")
+
     params = {
         "INPUT": r_network_gpkg,
         "EXTENT": extent,
-        "OPTIONS": "",
+        "CLIP": False,
         "OUTPUT": "TEMPORARY_OUTPUT",
     }
-    result: dict = processing.run("gdal:clipvectorbyextent", params)
-    temp_path = result["OUTPUT"]
-    return temp_path
+    result = processing.run("native:extractbyextent", params)
+
+    return result["OUTPUT"]
 
 
 def generate_start_end_points_for_ID(mini_trips, i_row):
@@ -404,7 +409,7 @@ def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
         ls_minitrips_gpkg = mini_tr_df.gpkg.unique()
 
         ls_minitrips = [
-            str(temp_folder_minitrip) + "/" + str(file) for file in ls_minitrips_gpkg
+            os.path.join(temp_folder_minitrip, file) for file in ls_minitrips_gpkg
         ]
 
         if_remove_single_file(trip_gpkg)
@@ -418,7 +423,7 @@ def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
         trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
 
         pr = trip_layer.dataProvider()
-        pr.addAttributes([QgsField("dist_stops", QMetaType.Double)])
+        pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
         trip_layer.updateFields()
 
         expression1 = QgsExpression("$length")
@@ -652,6 +657,11 @@ def save_csv_overwrite_gpkg(name, gpkg, csv):
             csv, "epsg:4326", ",", "lon", "lat"
         )
     )
+    if os.name == "nt":  # Windows
+        csv_path = csv.replace("\\", "/")
+        to_check_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}&field=trip:integer".format(
+            csv_path, "epsg:4326", ",", "lon", "lat"
+        )
     new_OSM_pos_layer = QgsVectorLayer(to_check_path, name, "delimitedtext")
     layer_context = new_OSM_pos_layer.transformContext()
     coordinates = QgsCoordinateTransformContext(layer_context)
@@ -688,11 +698,10 @@ def check_the_off_road_pt_stops(
 
     allstops_to_check.to_csv(allstops_csv, index=False)
 
-    allstops_path = (
-        r"file:///{}?crs={}&delimiter={}&xField={}&yField={}&field=trip:integer".format(
-            allstops_csv, "epsg:4326", ",", "lon", "lat"
-        )
+    allstops_path = correct_uri_for_windows(
+        allstops_csv, "lon", "lat", additional_args={"field": "trip:integer"}
     )
+
     allstops_layer = QgsVectorLayer(allstops_path, allstops_name, "delimitedtext")
 
     param = {
@@ -731,7 +740,7 @@ def recalulate_lon_lat_from_editing(
 
     pr = vector_layer.dataProvider()
     pr.addAttributes(
-        [QgsField("lon", QMetaType.Double), QgsField("lat", QMetaType.Double)]
+        [QgsField("lon", QVariant.Double), QgsField("lat", QVariant.Double)]
     )
     vector_layer.updateFields()
 
@@ -765,3 +774,18 @@ def vector_layer_to_gpkg(vector_layer, layer_name, gpkg, seleted_features=False)
     QgsVectorFileWriter.writeAsVectorFormatV3(
         vector_layer, gpkg, coordinates, save_options
     )
+
+
+def correct_uri_for_windows(csv_path, lon, lat, additional_args: dict = {}):
+    args = {
+        "crs": "epsg:4326",
+        "delimiter": ",",
+        "xField": lon,
+        "yField": lat,
+    }
+    if additional_args:
+        args.update(additional_args)
+    csv_path = csv_path.replace("\\", "/")
+    uri = f"file:///{csv_path}?{urlencode(args, safe=':,')}"
+
+    return uri
