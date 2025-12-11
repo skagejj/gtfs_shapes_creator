@@ -94,7 +94,7 @@ from .GTFS_shapes_Tracer import (
     stop_times_update,
 )
 
-from qgis.PyQt.QtWidgets import QListWidgetItem
+from qgis.PyQt.QtWidgets import QListWidgetItem, QApplication
 from PyQt5.QtCore import Qt
 import pandas as pd
 import json
@@ -207,9 +207,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def __uploadOSM(self):
         self.iface.messageBar().pushMessage(
             f"at {datetime.datetime.now()} starting the real job",
-            level=Qgis.info,
+            level=Qgis.Info,
             duration=20,
         )
+        QApplication.processEvents()
         selected_items = self.listBusWidget.selectedItems()
 
         # load the folders
@@ -1178,6 +1179,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         files_to_del = load_files_to_del(agencies_folder)
 
+        stops_txt = str(agencies_folder) + "/stops.txt"
+        stops = pd.read_csv(stops_txt)
+
+        south = round(float(stops.stop_lat.min()) - 0.05, 6)
+        west = round(float(stops.stop_lon.min()) - 0.05, 6)
+        north = round(float(stops.stop_lat.max()) + 0.05, 6)
+        east = round(float(stops.stop_lon.max()) + 0.05, 6)
+
         temp_folder = "OSM_data"
         road_temp_folder = os.path.join(agencies_folder, temp_folder)
 
@@ -1327,6 +1336,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         canvas.zoomScale(50)
 
         canvas.refresh()
+        QApplication.processEvents()
 
         if_remove_single_file(trips_done_csv)
         ls_gpkg_df.to_csv(trips_done_csv, index=False)
