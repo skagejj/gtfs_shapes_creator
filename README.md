@@ -36,8 +36,13 @@ Watch the video tutorial for those plugin [here](https://drive.google.com/file/d
 ## Installation
 1. Clone or download the plugin repository.
 2. Place the plugin folder in your QGIS plugins directory:
+   for Windows
    ```
    c:\Users\<your_username>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\
+   ```
+   for linux
+   ```
+   /home/user_name/.local/share/QGIS/QGIS3/profiles/default/python/plugins
    ```
 3. Restart QGIS and enable the plugin from the Plugin Manager.
 
