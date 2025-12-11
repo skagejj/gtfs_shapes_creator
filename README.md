@@ -1,32 +1,37 @@
 # GTFS shapes.txt Creator 
 
 ## Overview
-This QGIS plugin enables advanced routing analysis for public transport systems by leveraging processed OpenStreetMap (OSM) data and GTFS (General Transit Feed Specification) datasets. It replace the ancient plugins to provide comprehensive smooth spatial analysis and routing capabilities.
+This QGIS plugin generates GTFS `shapes.txt` files by routing transit lines on OpenStreetMap (OSM) road and rail networks. It integrates public transport data from opentransportdata.swiss with OSM geographic data to automatically trace transit routes and create standardized GTFS shape files for various transport modes (buses, trams, regional trains, and funiculars).
 
 ## Features
-- **Public Transport Routing**: Calculates optimal routes using OSM road networks and GTFS stop data.
-- **Integration with OSM and GTFS**: Utilizes spatial attributes from OSM and GTFS for accurate routing.
-- **Customizable Routing Parameters**: Supports various transport modes and user-defined preferences.
-- **Layer Generation**: Produces layers optimized for routing and visualization in QGIS.
+- **Multi-Transport Support**: Handles buses, trams, regional trains, and funiculars with mode-specific routing
+- **GTFS Integration**: Processes transit data from opentransportdata.swiss GTFS feeds
+- **OSM Network Routing**: Automatically downloads and uses OpenStreetMap road and rail networks for routing
+- **Stop Validation**: Detects and manages off-road public transport stops with interactive positioning tools
+- **Automatic Shape Generation**: Creates GTFS-compliant `shapes.txt` files from routed transit lines
+- **Multi-Layer Support**: Generates organized QGIS layers for roads, rails, and individual trip routes
 
-## Teasing
-Watch the teasing for these plugin [here](https://drive.google.com/file/d/1LilcjYFtBTateYkhFQe7UMBH2HwEt9Wo/view?usp=drive_link).
+## Plugin Architecture
+This plugin consolidates the functionality of 4 legacy plugins:
+1. **GTFS Agency Selection** - Manages transit agencies from GTFS feeds
+2. **OSM Import Roads and Public Transport Stops** - Downloads and imports OSM network data
+3. **OSM PT Routing** - Performs route-finding on networks
+4. **GTFS Shapes Tracer** - Converts routes to GTFS shapes format
+## Video Tutorial (not up to date yet)
+Watch the video tutorial for those plugin [here](https://drive.google.com/file/d/1LjzkYpu6Bfrb2KlrN3byfVHU8qHSqKoH/view?usp=sharing).
 
-## FlowRide Plugin Series
-This plugin is the plugin that put together the ancient 4 plugins:
-1. **GTFS Agency Selection**
-2. **OSM Import Roads and Public Transport Stops** 
-3. **OSM PT Routing** 
-4. **GTFS Shapes Tracer** 
 
-## Usage
-0. **Prepare Data**: Use the previous plugins to import and process OSM and GTFS data.
-1. **Find and move the off-road stops**: with the "Download the separate PT stops" button you can detect the stops, those need to be moved
-2. **Run Routing Analysis**: Use OSM PT Routing to calculate and visualize public transport routes.
-3. **Visualize Results**: Display optimized routes and layers in QGIS for further analysis.
+## Workflow
+1. **Select GTFS Folder**: Point to your GTFS dataset directory
+2. **Update Agencies**: Load available transit agencies from the GTFS feed
+3. **Select Transit Routes**: Choose specific routes by transport mode
+4. **Download OSM Data**: Import road/rail networks for the selected routes
+5. **Validate Stops**: Identify and reposition stops that don't align with roads
+6. **Create Trips**: Generate routing trips on the OSM network
+7. **Display Routes**: Visualize routed trips in QGIS
+8. **Generate Shapes**: Create final GTFS `shapes.txt` file
 
-## Video Tutorial
-Watch the video tutorial for this plugin [here](https://drive.google.com/file/d/1LjzkYpu6Bfrb2KlrN3byfVHU8qHSqKoH/view?usp=sharing).
+
 
 ## Installation
 1. Clone or download the plugin repository.
