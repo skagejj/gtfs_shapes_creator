@@ -442,17 +442,8 @@ def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
         trip_layer.commitChanges()
 
         lsto_keep = ["layer", "dist_stops", "start", "end"]
-
-        IDto_delete = [
-            trip_layer.fields().indexOf(field_name) for field_name in lsto_keep
-        ]
-        IDto_delete = [index for index in IDto_delete if index != -1]
-
         if_remove_single_file(trip_csv)
-
-        QgsVectorFileWriter.writeAsVectorFormat(
-            trip_layer, trip_csv, "utf-8", driverName="CSV", attributes=IDto_delete
-        )
+        vector_layer_to_csv(trip_layer, trip_csv, fields_to_keep=lsto_keep)
 
         trip_df = pd.read_csv(trip_csv, dtype={"dist_stops": "float"})
 
