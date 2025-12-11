@@ -94,7 +94,6 @@ from .GTFS_shapes_Tracer import (
 )
 
 from qgis.PyQt.QtWidgets import QListWidgetItem
-from PyQt5.QtCore import Qt
 import pandas as pd
 import json
 import datetime
@@ -103,7 +102,8 @@ import getpass
 from .resources import *
 
 import webbrowser
-from PyQt5.QtCore import QMetaType
+from qgis.PyQt.QtCore import QVariant
+from PyQt5.QtCore import Qt
 from qgis.PyQt.QtWidgets import QListWidgetItem
 
 FORM_CLASS, _ = uic.loadUiType(
@@ -228,16 +228,16 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         temp_folder = "OSM_data"
         road_temp_folder = os.path.join(agencies_folder, temp_folder)
 
-        trips_txt = str(agencies_folder) + "/trips.txt"
+        trips_txt = os.path.join(agencies_folder, "trips.txt")
 
-        stops_txt = str(agencies_folder) + "/stops.txt"
+        stops_txt = os.path.join(agencies_folder, "stops.txt")
         stops = pd.read_csv(stops_txt)
 
-        agency_txt = str(agencies_folder) + "/agency.txt"
+        agency_txt = os.path.join(agencies_folder, "agency.txt")
         agency = pd.read_csv(agency_txt)
         ls_agency = agency.agency_id.unique()
 
-        lines_df_csv = str(agencies_folder) + "/lines_files_list.csv"
+        lines_df_csv = os.path.join(agencies_folder, "lines_files_list.csv")
 
         south = round(float(stops.stop_lat.min()) - 0.05, 6)
         west = round(float(stops.stop_lon.min()) - 0.05, 6)
@@ -246,19 +246,19 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         OSM_ways_name = "OSM_ways"
         OSM_ways_layer_name = "OSM_ways_lines"
-        OSM_ways_gpkg = str(road_temp_folder) + "/" + str(OSM_ways_name) + ".gpkg"
+        OSM_ways_gpkg = os.path.join(road_temp_folder, OSM_ways_name + ".gpkg")
 
         OSM_tramways_name = "OSM_tramways"
-        OSM_tramways_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_tramways_name) + ".gpkg"
-        )
+        OSM_tramways_gpkg = os.path.join(road_temp_folder, OSM_tramways_name + ".gpkg")
 
         OSM_Regtrainways_name = "OSM_Regtrainways"
-        OSM_Regtrainways_gpkg = road_temp_folder + "/" + OSM_Regtrainways_name + ".gpkg"
+        OSM_Regtrainways_gpkg = os.path.join(
+            road_temp_folder, OSM_Regtrainways_name + ".gpkg"
+        )
 
         OSM_funicularways_name = "OSM_funicularways"
-        OSM_funicularways_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_funicularways_name) + ".gpkg"
+        OSM_funicularways_gpkg = os.path.join(
+            road_temp_folder, OSM_funicularways_name + ".gpkg"
         )
 
         extent = str(south) + "," + str(west) + "," + str(north) + "," + str(east)
@@ -276,29 +276,41 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         # naming files and paths
 
         OSM_roads_name = "OSM_roads"
-        OSM_roads_gpkg = road_temp_folder + "/" + OSM_roads_name + ".gpkg"
+        OSM_roads_gpkg = os.path.join(road_temp_folder, OSM_roads_name + ".gpkg")
+
+        OSM_roads_with_ms_ow_fr_name = "OSM_roads_plus"
+        OSM_roads_with_ms_ow_fr_gpkg = os.path.join(
+            road_temp_folder, OSM_roads_with_ms_ow_fr_name + ".gpkg"
+        )
 
         OSM_tram_name = "OSM_tram"
-        OSM_rails_gpkg = road_temp_folder + "/" + OSM_tram_name + ".gpkg"
+        OSM_rails_gpkg = os.path.join(road_temp_folder, OSM_tram_name + ".gpkg")
 
         OSM_Regtrain_name = "OSM_Regtrain"
-        OSM_Regtrain_gpkg = road_temp_folder + "/" + OSM_Regtrain_name + ".gpkg"
+        OSM_Regtrain_gpkg = os.path.join(road_temp_folder, OSM_Regtrain_name + ".gpkg")
 
         OSM_funicular_name = "OSM_funicular"
-        OSM_funicular_gpkg = road_temp_folder + "/" + OSM_funicular_name + ".gpkg"
+        OSM_funicular_gpkg = os.path.join(
+            road_temp_folder, OSM_funicular_name + ".gpkg"
+        )
 
         OSM_roads_nameCSV = "OSM_roads_CSV"
-        OSM_roads_csv = road_temp_folder + "/" + OSM_roads_name + ".csv"
+        OSM_roads_csv = os.path.join(road_temp_folder, OSM_roads_name + ".csv")
 
         highway_speed_name = "highway_average_speed"
-        highway_speed_csv = road_temp_folder + "/" + highway_speed_name + ".csv"
+        highway_speed_csv = os.path.join(road_temp_folder, highway_speed_name + ".csv")
 
         bus_lanes_name = "OSM_bus_lanes"
-        OSM_bus_lanes_gpkg = road_temp_folder + "/" + bus_lanes_name + ".gpkg"
-        OSM_bus_lanes_csv = road_temp_folder + "/" + bus_lanes_name + ".csv"
+        OSM_bus_lanes_gpkg = os.path.join(road_temp_folder, bus_lanes_name + ".gpkg")
+        OSM_bus_lanes_csv = os.path.join(road_temp_folder, bus_lanes_name + ".csv")
+
+        OSM_bus_lanes_with_ms_ow_fr_name = "OSM_bus_lanes_plus"
+        OSM_bus_lanes_with_ms_ow_fr_gpkg = os.path.join(
+            road_temp_folder, OSM_bus_lanes_with_ms_ow_fr_name + ".gpkg"
+        )
 
         full_roads_name = "full_city_roads"
-        full_roads_gpgk = road_temp_folder + "/" + full_roads_name + ".gpkg"
+        full_roads_gpgk = os.path.join(road_temp_folder, full_roads_name + ".gpkg")
 
         city_roads_name = "city roads"
 
@@ -308,35 +320,30 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         city_funicular_name = "city funicular"
 
-        Ttlbs_txt = agencies_folder + "/stop_times.txt"
+        Ttlbs_txt = os.path.join(agencies_folder, "stop_times.txt")
 
         Ttbls_plus_name = "stop_times_plus"
-        Ttbls_plus_csv = agencies_folder + "/" + Ttbls_plus_name + ".csv"
+        Ttbls_plus_csv = os.path.join(agencies_folder, Ttbls_plus_name + ".csv")
 
         Ttbls_selected_name = "stop_times_selected_lines"
-        Ttbls_selected_txt = agencies_folder + "/" + Ttbls_selected_name + ".txt"
+        Ttbls_selected_txt = os.path.join(agencies_folder, Ttbls_selected_name + ".txt")
 
         files_to_delete_next_bus_loading_name = "files_to_delete_next_bus_loading"
-        files_to_delete_next_bus_loading_json = (
-            str(agencies_folder)
-            + "/temp/"
-            + str(files_to_delete_next_bus_loading_name)
-            + ".json"
+        files_to_delete_next_bus_loading_json = os.path.join(
+            agencies_folder, "temp", files_to_delete_next_bus_loading_name + ".json"
         )
         files_to_del = load_files_to_del(agencies_folder)
 
         user_name = getpass.getuser() or "user"
         temp_folder = f"{user_name}_main_files"
         main_files_fld = os.path.join(agencies_folder, temp_folder)
-        main_files_csv = (
-            str(agencies_folder) + "/" + str(temp_folder) + "/main_files.csv"
-        )
+        main_files_csv = os.path.join(agencies_folder, temp_folder + "main_files.csv")
 
         temp_folder = "temp/trip_id_assignement"
         folder_trip_id_assign = os.path.join(agencies_folder, temp_folder)
 
         ls_buses_done_name = "buses"
-        ls_buses_done_csv = str(main_files_fld) + "/" + str(ls_buses_done_name) + ".csv"
+        ls_buses_done_csv = os.path.join(main_files_fld, ls_buses_done_name + ".csv")
 
         tempfolder = "temp/stop_times_perroute"
         temp_folder_Ttbls = os.path.join(agencies_folder, tempfolder)
@@ -368,12 +375,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         tempfolder = "temp/temp_OSM_forrouting"
         temp_OSM_for_routing = os.path.join(agencies_folder, tempfolder)
 
-        GTFSnm_angledf_csv = str(outputspath) + "/GTFSnm_angl.csv"
-        OSMwithGTFS_csv = str(outputspath) + "/OSMintersecGTFS.csv"
-        dfnomatch_csv = str(outputspath) + "/OSMnomatch.csv"
-        GTFSnm_rect_csv = str(outputspath) + "/GTFSnm_rect.csv"
-        GTFSnmRCT_posdf_csv = str(outputspath) + "/GTFSnmRCT_NEWpos.csv"
-        OSM4rout_file = str(outputspath) + "/OSM4routing.csv"
+        GTFSnm_angledf_csv = os.path.join(outputspath, "GTFSnm_angl.csv")
+        OSMwithGTFS_csv = os.path.join(outputspath, "OSMintersecGTFS.csv")
+        dfnomatch_csv = os.path.join(outputspath, "OSMnomatch.csv")
+        GTFSnm_rect_csv = os.path.join(outputspath, "GTFSnm_rect.csv")
+        GTFSnmRCT_posdf_csv = os.path.join(outputspath, "GTFSnmRCT_NEWpos.csv")
+        OSM4rout_file = os.path.join(outputspath, "OSM4routing.csv")
 
         GTFSnm_angledf = pd.DataFrame()
         OSMwithGTFS = pd.DataFrame()
@@ -412,8 +419,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             # Saving roads (only the lines of OSM file)
             Roads_layer_file = str(OSM_ways_gpkg) + "|layername=" + OSM_ways_layer_name
-            Roads_layer = QgsVectorLayer(Roads_layer_file, "Roads", "ogr")
-            vector_layer_to_gpkg(Roads_layer, "Roads", OSM_roads_gpkg)
+            Roads_layer = QgsVectorLayer(Roads_layer_file, OSM_roads_name, "ogr")
+            vector_layer_to_gpkg(Roads_layer, OSM_roads_name, OSM_roads_gpkg)
 
             vector_layer_to_csv(Roads_layer, OSM_roads_csv)
 
@@ -470,16 +477,18 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 OSM_bus_lanes_csv,
                 OSM_roads_gpkg,
                 highway_speed_csv,
+                OSM_bus_lanes_with_ms_ow_fr_gpkg,
+                OSM_bus_lanes_with_ms_ow_fr_name,
             )
 
             full_city_roads(
                 OSM_roads_gpkg,
                 OSM_roads_csv,
-                OSM_bus_lanes_gpkg,
                 full_roads_gpgk,
-                city_roads_name,
                 highway_speed_csv,
-                bus_lanes_name,
+                OSM_roads_with_ms_ow_fr_name,
+                OSM_roads_with_ms_ow_fr_gpkg,
+                OSM_bus_lanes_with_ms_ow_fr_gpkg,
             )
 
         if_not_make(
@@ -629,8 +638,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             line = lines_df.loc[i_row, "line_name"]
             Ttbl_file = lines_df.loc[i_row, "GTFSstop_times"]
             GTFSstops_csv = lines_df.loc[i_row, "GTFSstops&segments"]
-            line_trip_csv = (
-                str(folder_trip_id_assign) + "/" + str(line) + "_trip_assignement.csv"
+            line_trip_csv = os.path.join(
+                folder_trip_id_assign, str(line) + "_trip_assignement.csv"
             )
             shape_assignement(GTFSstops_csv, Ttbl_file, line_trip_csv, trips_txt)
             lines_df = add_filepath_to_lines_csv(
@@ -718,12 +727,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         while i_row < len(lines_df):
             line = lines_df.loc[i_row, "line_name"]
             GTFSstops_angle = lines_df.loc[i_row, "GTFSstps_angle"]
-            GTFSstops_angle_sidewalk_gpkg = (
-                str(temproadfldr) + "/GTFS" + str(line) + "_anlge_sidewalk.gpkg"
+            GTFSstops_angle_sidewalk_gpkg = os.path.join(
+                temproadfldr, "GTFS" + str(line) + "_anlge_sidewalk.gpkg"
             )
-            GTFSstops_angle_OSMonROADline_gpkg = (
-                str(temproadfldr) + "/GTFS" + str(line) + "_OSMonROADline.gpkg"
+
+            GTFSstops_angle_OSMonROADline_gpkg = os.path.join(
+                temproadfldr, "GTFS" + str(line) + "_OSMonROADline.gpkg"
             )
+
             lines_df = add_filepath_to_lines_csv(
                 lines_df,
                 lines_df_csv,
@@ -755,11 +766,13 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             ]
             line = lines_df.loc[i_row, "line_name"]
             trnsprt_type = lines_df.loc[i_row, "trnsprt_type"]
-            GTFSstps_rect_sidewalk_csv = (
-                str(temp_rect_folder) + "/GTFSangl_sidewalk_" + str(line) + ".csv"
+            GTFSstps_rect_sidewalk_csv = os.path.join(
+                temp_rect_folder, "GTFSangl_sidewalk_" + str(line) + ".csv"
             )
+
             GTFSstps_rect_sidewalk_gpkg = (
-                str(temp_rect_folder) + "/rects_sidewalk_" + str(line) + ".gpkg"
+                os.path.join(temp_rect_folder),
+                "rects_sidewalk_" + str(line) + ".gpkg",
             )
             GTFSstops_angle_sidewalk_layer = QgsVectorLayer(
                 GTFSstops_angle_sidewalk_gpkg,
@@ -793,8 +806,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             GTFSstops_path_OSMonROADline = lines_df.loc[
                 i_row, "GTFSstps_angle_OSMonROADline"
             ]
-            GTFSstps_rect_OSMonROADline_gpkg = (
-                str(temp_rect_folder) + "/rects_OSMonROADline_" + str(line) + ".gpkg"
+            GTFSstps_rect_OSMonROADline_gpkg = os.path.join(
+                temp_rect_folder, "rects_OSMonROADline_" + str(line) + ".gpkg"
             )
             GTFSstops_angle_OSMonROADline_layer = QgsVectorLayer(
                 GTFSstops_path_OSMonROADline,
@@ -813,7 +826,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 )
                 ls_GTFSstps_rect.append(GTFSstps_rect_OSMonROADline_gpkg)
 
-            GTFSstps_rect_gpkg = str(temp_rect_folder) + "/rects_" + str(line) + ".gpkg"
+            GTFSstps_rect_gpkg = os.path.join(
+                temp_rect_folder, "rects_" + str(line) + ".gpkg"
+            )
             lines_df = add_filepath_to_lines_csv(
                 lines_df, lines_df_csv, i_row, {"GTFSstps_rect": GTFSstps_rect_gpkg}
             )
@@ -833,8 +848,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     f"{layerType}?crs={crs}", "New Empty Layer", "memory"
                 )
                 fields = QgsFields()
-                fields.append(QgsField("fid", QMetaType.Int))
-                fields.append(QgsField("line_name", QMetaType.QString))
+                fields.append(QgsField("fid", QVariant.Int))
+                fields.append(QgsField("line_name", QVariant.String))
                 emptyLayer.startEditing()
                 emptyLayer.dataProvider().addAttributes(fields.toList())
                 emptyLayer.updateFields()
@@ -851,12 +866,13 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             trnsprt_type = lines_df.loc[i_row, "trnsprt_type"]
 
             OSM_PTstp_rel_name = "PT_stops_rel_" + str(line)
-            OSM_PTstp_rel_gpkg = (
-                str(OSMstops_temp_folder) + "/" + str(OSM_PTstp_rel_name) + ".gpkg"
+            OSM_PTstp_rel_gpkg = os.path.join(
+                OSMstops_temp_folder, OSM_PTstp_rel_name + ".gpkg"
             )
+
             OSM_PTstp_name = "PT_stop_position_" + str(line)
-            OSM_PTstp_gpkg = (
-                str(OSMstops_temp_folder) + "/" + str(OSM_PTstp_name) + ".gpkg"
+            OSM_PTstp_gpkg = os.path.join(
+                OSMstops_temp_folder, OSM_PTstp_name + ".gpkg"
             )
 
             lines_df = add_filepath_to_lines_csv(
@@ -908,11 +924,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             OSMjnGTFS = pd.read_csv(lines_df.loc[i_row, "OSMintersecGTFS"])
             GTFSstops = pd.read_csv(lines_df.loc[i_row, "GTFSstops&segments"])
             GTFSnm_RD = pd.read_csv(lines_df.loc[i_row, "GTFSnm_angCSV"])
-            GTFSnmRCT_csv = (
-                str(temp_GTFSnm_folder)
-                + "/GTFSnmRCT_"
-                + str(lines_df.loc[i_row, "line_name"])
-                + ".csv"
+            GTFSnmRCT_csv = os.path.join(
+                temp_GTFSnm_folder,
+                "GTFSnmRCT_" + str(lines_df.loc[i_row, "line_name"]) + ".csv",
             )
             if not OSMjnGTFS.empty:
                 lsGTFSjoined = OSMjnGTFS.GTFS_stop_id.unique()
@@ -953,11 +967,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     files_to_del,
                 )
             else:
-                NEWpos_file_nmRCT = (
-                    str(temp_GTFSpos_folder)
-                    + "/GTFSnmRCT_pos_"
-                    + str(line_name)
-                    + ".csv"
+                NEWpos_file_nmRCT = os.path.join(
+                    temp_GTFSpos_folder, "GTFSnmRCT_pos_" + str(line_name) + ".csv"
                 )
 
             lines_df = add_filepath_to_lines_csv(
@@ -1013,22 +1024,20 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         nmRD_temp_folder = os.path.join(agencies_folder, temp_folder)
 
         full_roads_name = "full_city_roads"
-        full_roads_gpgk = str(road_temp_folder) + "/" + str(full_roads_name) + ".gpkg"
+        full_roads_gpgk = os.path.join(road_temp_folder, full_roads_name + ".gpkg")
 
         OSMallroad_name = "OSMallroad"
-        OSMallroad_gpkg = os.path.join(nmRD_temp_folder, str(OSMallroad_name) + ".gpkg")
+        OSMallroad_gpkg = os.path.join(nmRD_temp_folder, OSMallroad_name + ".gpkg")
 
         tram_rails_name = "OSM_tram"
-        tram_rails_gpgk = str(road_temp_folder) + "/" + str(tram_rails_name) + ".gpkg"
+        tram_rails_gpgk = os.path.join(road_temp_folder, tram_rails_name + ".gpkg")
 
         OSM_Regtrain_name = "OSM_Regtrain"
-        OSM_Regtrain_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_Regtrain_name) + ".gpkg"
-        )
+        OSM_Regtrain_gpkg = os.path.join(road_temp_folder, OSM_Regtrain_name + ".gpkg")
 
         OSM_funicular_name = "OSM_funicular"
-        OSM_funicular_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_funicular_name) + ".gpkg"
+        OSM_funicular_gpkg = os.path.join(
+            road_temp_folder, OSM_funicular_name + ".gpkg"
         )
 
         if not os.path.exists(nmRD_temp_folder):
@@ -1169,36 +1178,34 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         road_temp_folder = os.path.join(agencies_folder, temp_folder)
 
         full_roads_name = "full_city_roads"
-        full_roads_gpgk = str(road_temp_folder) + "/" + str(full_roads_name) + ".gpkg"
+        full_roads_gpgk = os.path.join(road_temp_folder, full_roads_name + ".gpkg")
 
         tram_rails_name = "OSM_tram"
-        tram_rails_gpgk = str(road_temp_folder) + "/" + str(tram_rails_name) + ".gpkg"
+        tram_rails_gpgk = os.path.join(road_temp_folder, tram_rails_name + ".gpkg")
 
         OSM_Regtrain_name = "OSM_Regtrain"
-        OSM_Regtrain_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_Regtrain_name) + ".gpkg"
-        )
+        OSM_Regtrain_gpkg = os.path.join(road_temp_folder, OSM_Regtrain_name + ".gpkg")
 
         OSM_funicular_name = "OSM_funicular"
-        OSM_funicular_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_funicular_name) + ".gpkg"
+        OSM_funicular_gpkg = os.path.join(
+            road_temp_folder, OSM_funicular_name + ".gpkg"
         )
 
         tempfolder = "temp/temp_OSM_forrouting"
         temp_OSM_for_routing = os.path.join(agencies_folder, tempfolder)
 
         OSM4rout_name = "OSM4routing"
-        OSM4rout_gpkg = str(outputspath) + "/" + str(OSM4rout_name) + ".gpkg"
-        OSM4rout_csv = str(outputspath) + "/" + str(OSM4rout_name) + ".csv"
+        OSM4rout_gpkg = os.path.join(outputspath, OSM4rout_name + ".gpkg")
+        OSM4rout_csv = os.path.join(outputspath, OSM4rout_name + ".csv")
 
         OSM4routing_name = "OSM4routing_XYminiTrips"
-        OSM4routing_csv = str(outputspath) + "/" + str(OSM4routing_name) + ".csv"
+        OSM4routing_csv = os.path.join(outputspath, OSM4routing_name + ".csv")
 
-        lines_trips_csv = str(agencies_folder) + "/lines_trips.csv"
+        lines_trips_csv = os.path.join(agencies_folder, "lines_trips.csv")
 
         shapes_txt = os.path.join(agencies_folder, "shapes.txt")
 
-        trnsprt_shapes = str(outputspath) + "/mini_shapes.gpkg"
+        trnsprt_shapes = os.path.join(outputspath, "mini_shapes.gpkg")
 
         tempfolder = "temp/mini-trips"
         temp_folder_minitrip = os.path.join(agencies_folder, tempfolder)
@@ -1210,9 +1217,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         shape_folder = os.path.join(outputspath, name_folder)
 
         trips_done_name = "trips_done"
-        trips_done_csv = (
-            str(temp_folder_linestrip) + "/" + str(trips_done_name) + ".csv"
-        )
+        trips_done_csv = os.path.join(temp_folder_linestrip, trips_done_name + ".csv")
 
         os.makedirs(shape_folder, exist_ok=True)
         os.makedirs(temp_folder_minitrip, exist_ok=True)
@@ -1231,11 +1236,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         layers_to_route = []
         for to_do in ls_to_do:
             layers_to_route.append(
-                str(temp_OSM_for_routing)
-                + "/"
-                + str(to_do)
-                + "|layername="
-                + str(to_do[:-5])
+                os.path.join(
+                    temp_OSM_for_routing, str(to_do) + "|layername=" + str(to_do[:-5])
+                )
             )
 
         if_remove(OSM4rout_gpkg, files_to_del)
@@ -1287,8 +1290,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         while idx < len(lines_trips):
             trip = str(lines_trips.loc[idx, "line_trip"])
 
-            trip_gpkg = str(outputspath) + "/" + str(trip) + ".gpkg"
-            trip_csv = str(outputspath) + "/" + str(trip) + ".csv"
+            trip_gpkg = os.path.join(outputspath, str(trip) + ".gpkg")
+            trip_csv = os.path.join(outputspath, str(trip) + ".csv")
             lines_trips.loc[idx, "gpkg"] = trip_gpkg
             lines_trips.loc[idx, "csv"] = trip_csv
             if not os.path.exists(trip_gpkg):
@@ -1360,16 +1363,16 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         shapes_txt = os.path.join(agencies_folder, "shapes.txt")
 
-        Ttlbs_txt = str(agencies_folder) + "/stop_times.txt"
+        Ttlbs_txt = os.path.join(agencies_folder, "stop_times.txt")
 
         temp_folder = "OSM_data"
         road_temp_folder = os.path.join(agencies_folder, temp_folder)
         OSM_roads_name = "OSM_roads"
-        OSM_roads_gpkg = str(road_temp_folder) + "/" + str(OSM_roads_name) + ".gpkg"
+        OSM_roads_gpkg = os.path.join(road_temp_folder, OSM_roads_name + ".gpkg")
 
-        lines_df_csv = str(agencies_folder) + "/lines_files_list.csv"
+        lines_df_csv = os.path.join(agencies_folder, "lines_files_list.csv")
 
-        lines_trips_csv = str(agencies_folder) + "/lines_trips.csv"
+        lines_trips_csv = os.path.join(agencies_folder, "lines_trips.csv")
 
         # loading the trips in gpkg
         ls_files = os.listdir(outputspath)
@@ -1402,7 +1405,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         for trip_to_shape in ls_trip_to_shape:
             trip_gpkg = os.path.join(outputspath, trip_to_shape)
             trip_name = str(trip_to_shape[:-5])
-            trip_vertex_gpkg = temp_folder_linestrip + "/" + trip_name + "_vertex.gpkg"
+            trip_vertex_gpkg = os.path.join(
+                temp_folder_linestrip, trip_name + "_vertex.gpkg"
+            )
             shape_csv = os.path.join(shape_folder, str(trip_name) + ".csv")
             trip = shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg)
             Ttbl_with_seq = stop_times_update(
@@ -1437,17 +1442,15 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         import zipfile
 
-        trips_txt = str(agencies_folder) + "/trips.txt"
-        routes_txt = str(agencies_folder) + "/routes.txt"
-        agency_txt = str(agencies_folder) + "/agency.txt"
-        stops_txt = str(agencies_folder) + "/stops.txt"
-        calendar_txt = str(agencies_folder) + "/calendar.txt"
-        calendar_dates_txt = str(agencies_folder) + "/calendar_dates.txt"
-        zip_file = (
-            str(agencies_folder)
-            + "/"
-            + os.path.splitext(os.path.basename(agencies_folder))[0]
-            + ".zip"
+        trips_txt = os.path.join(agencies_folder, "trips.txt")
+        routes_txt = os.path.join(agencies_folder, "routes.txt")
+        agency_txt = os.path.join(agencies_folder, "agency.txt")
+        stops_txt = os.path.join(agencies_folder, "stops.txt")
+        calendar_txt = os.path.join(agencies_folder, "calendar.txt")
+        calendar_dates_txt = os.path.join(agencies_folder, "calendar_dates.txt")
+        zip_file = os.path.join(
+            agencies_folder,
+            os.path.splitext(os.path.basename(agencies_folder))[0] + ".zip",
         )
         lista_files = [
             Ttlbs_txt,
@@ -1522,10 +1525,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         temp_folder_main = str(os.getenv("USERNAME")) + "_main_files"
         main_files_fld = os.path.join(agencies_folder, temp_folder_main)
         buses_done_csv = os.path.join(main_files_fld, "buses.csv")
-        lines_df_csv = str(agencies_folder) + "/lines_files_list.csv"
-        uq_mn_trips_csv = str(agencies_folder) + "/temp/mini-trips/uq_mini_trips.csv"
-        files_to_delete_next_bus_loading_json = (
-            str(agencies_folder) + "/temp/files_to_delete_next_bus_loading.json"
+        lines_df_csv = os.path.join(agencies_folder, "lines_files_list.csv")
+        uq_mn_trips_csv = os.path.join(
+            agencies_folder, "temp/mini-trips/uq_mini_trips.csv"
+        )
+        files_to_delete_next_bus_loading_json = os.path.join(
+            agencies_folder, "temp/files_to_delete_next_bus_loading.json"
         )
 
         files_to_del = load_files_to_del(agencies_folder)
@@ -1635,19 +1640,17 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         road_temp_folder = os.path.join(agencies_folder, temp_folder)
 
         full_roads_name = "full_city_roads"
-        full_roads_gpgk = str(road_temp_folder) + "/" + str(full_roads_name) + ".gpkg"
+        full_roads_gpgk = os.path.join(road_temp_folder, full_roads_name + ".gpkg")
 
         tram_rails_name = "OSM_tram"
-        tram_rails_gpgk = str(road_temp_folder) + "/" + str(tram_rails_name) + ".gpkg"
+        tram_rails_gpgk = os.path.join(road_temp_folder, tram_rails_name + ".gpkg")
 
         OSM_Regtrain_name = "OSM_Regtrain"
-        OSM_Regtrain_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_Regtrain_name) + ".gpkg"
-        )
+        OSM_Regtrain_gpkg = os.path.join(road_temp_folder, OSM_Regtrain_name + ".gpkg")
 
         OSM_funicular_name = "OSM_funicular"
-        OSM_funicular_gpkg = (
-            str(road_temp_folder) + "/" + str(OSM_funicular_name) + ".gpkg"
+        OSM_funicular_gpkg = os.path.join(
+            road_temp_folder, OSM_funicular_name + ".gpkg"
         )
 
         selected_items = self.tripsListWidget.selectedItems()
@@ -1662,7 +1665,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         for trip in ls_to_disp:
             if not QgsProject.instance().mapLayersByName(str(trip[:-5])):
-                trip_gpkg = str(outputspath) + "/" + str(trip)
+                trip_gpkg = os.path.join(outputspath, trip)
                 tirp_layer = QgsVectorLayer(trip_gpkg, str(trip[:-5]), "ogr")
                 symbol = tirp_layer.renderer().symbol()
                 symbol.setWidth(0.9)

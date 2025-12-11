@@ -7,7 +7,7 @@ from gtfs_shapes_creator.osmimport_routes_ptstops import (
     full_city_roads,
 )
 
-agencies_folder = "/media/luigi/Part_3/Downloads_ubuntu/gtfs_fp2025_20251112/agen_881"
+agencies_folder = "F:\\Downloads\\gtfs_fp2026_20251206\\agen_881"
 
 temp_folder = "OSM_data"
 road_temp_folder = os.path.join(agencies_folder, temp_folder)
@@ -37,7 +37,7 @@ OSM_ways_gpkg = str(road_temp_folder) + "/" + str(OSM_ways_name) + ".gpkg"
 
 Roads_layer_file = str(OSM_ways_gpkg) + "|layername=" + OSM_ways_layer_name
 Roads_layer = QgsVectorLayer(Roads_layer_file, "Roads", "ogr")
-vector_layer_to_gpkg(Roads_layer, "Roads", OSM_roads_gpkg)
+vector_layer_to_gpkg(Roads_layer, OSM_roads_name, OSM_roads_gpkg)
 
 vector_layer_to_csv(Roads_layer, OSM_roads_csv)
 
