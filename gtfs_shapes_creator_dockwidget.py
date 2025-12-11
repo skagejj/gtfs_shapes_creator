@@ -1483,6 +1483,13 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     compress_type=zipfile.ZIP_DEFLATED,
                 )
 
+        self.iface.messageBar().pushMessage(
+            "Info",
+            self.tr(f"It's DONE! Find your file in {zip_file}, CONGRATULATION!"),
+            level=Qgis.Info,
+            duration=120,
+        )
+
     def __ZoomStop(self):
 
         # load the folders
@@ -1644,7 +1651,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if_remove(uq_mn_trips_csv, files_to_del)
             uq_mn_trips.to_csv(uq_mn_trips_csv, index=False)
 
-        founds = []
         for line_name in ls_lines_names:
             for found in find("*" + str(line_name) + "*", agencies_folder):
                 files_to_del = if_remove(found, files_to_del)
@@ -1652,7 +1658,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 "Info",
                 self.tr("the " + str(line_name) + " has been removed sucessfully"),
                 level=Qgis.Info,
-                duration=7,
+                duration=30,
             )
 
         files_to_del_str = json.dumps(files_to_del, indent=2)
