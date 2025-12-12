@@ -54,9 +54,6 @@ def load_files_to_del(agencies_folder):
         files_to_del_str = json.dumps(files_to_del, indent=2)
         with open(files_to_delete_next_bus_loading_json, "w") as f:
             f.write(files_to_del_str)
-        if files_to_del["path"]:
-            print("the files will be deleted only restarting QGIS")
-            print('RESTART QGIS and click again the "Update Transport numbers" button')
     else:
         files_to_del = {"path": []}
     return files_to_del
@@ -70,7 +67,6 @@ def if_remove(file_path, files_to_del):
             os.remove(file_path)
         except Exception as e:
             files_to_del["path"].append(file_path)
-            print(f"Error removing file {file_path}: {e}")
     return files_to_del
 
 
@@ -96,7 +92,6 @@ def quickOSM_API(params):
     for attempt in range(max_retries):
         try:
             processing.run("quickosm:downloadosmdatarawquery", params)
-            print(f"Successfully downloaded OSM ways data on attempt {attempt + 1}")
             break
         except Exception as e:
             if "Gateway Timeout" in str(e) or "NetWorkErrorException" in str(e):
@@ -104,12 +99,8 @@ def quickOSM_API(params):
                     wait_time = (
                         attempt + 1
                     ) * 30  # Wait 30, 60 seconds between retries
-                    print(
-                        f"Attempt {attempt + 1} failed with timeout error. Retrying in {wait_time} seconds..."
-                    )
                     time.sleep(wait_time)
                 else:
-                    print(f"All {max_retries} attempts failed. Final error: {e}")
                     raise
             else:
                 # Re-raise non-timeout errors immediately
@@ -266,8 +257,6 @@ def busroutes(
         OSM_bus_lanes_with_ms_ow_fr_gpkg,
     )
 
-    print(f"at {datetime.datetime.now()} ending to fill the oneway_routing column")
-
 
 def full_city_roads(
     OSM_roads_gpkg,
@@ -310,8 +299,6 @@ def full_city_roads(
         OSM_roads_with_ms_ow_fr_gpkg,
         OSM_bus_lanes_with_ms_ow_fr_gpkg,
     ]
-    for road in ls_roads:
-        print(road)
 
     params = {
         "LAYERS": ls_roads,
@@ -410,8 +397,6 @@ def vector_layer_to_gpkg(
                     vector_layer.startEditing()
                     vector_layer.deleteAttribute(idx)
                     vector_layer.commitChanges()
-                else:
-                    print(f"ID Field '{field}' not found.")
 
     layer_context = vector_layer.transformContext()
     coordinates = QgsCoordinateTransformContext(layer_context)
@@ -477,12 +462,8 @@ def time_tables_perTransport(rt, Ttbls, tempfldr, lstrnsprt):
         num = str(re.findall("[a-zA-Z]+|[0-9]+", num)[0]) + "plus"
     id_line = 0
     if str(str(trnsprt_type) + str(num)) in lstrnsprt:
-        print(str(num) + " already exists, I am creating anotherone")
         id_line = id_line + 1
     while str(str(trnsprt_type) + str(num) + "_" + str(id_line)) in lstrnsprt:
-        print(
-            str(num) + "_" + str(id_line) + " already exists, I am creating anotherone"
-        )
         id_line = id_line + 1
     if id_line == 0:
         nametbl = str(trnsprt_type) + str(num)
@@ -1238,8 +1219,6 @@ def rectangles_OSMonROADline(
     res = vlayer.dataProvider().deleteAttributes(idtodelete)
     if res:
         vlayer.updateFields()  # Update the layer's fields
-    else:
-        print("Failed to delete attributes")
     vlayer.commitChanges()
 
     del params, lstodelete, idtodelete
@@ -1284,10 +1263,8 @@ def OSM_PTstps_dwnld(
     }
     try:
         quickOSM_API(params)
-    except Exception as e:
-        print(
-            'Overpass API request failed for "server replied Gateway Timeout" -> (skipped)'
-        )
+    except:
+        # Overpass API request failed for "server replied Gateway Timeout" -> (skipped)'
         schema = QgsFields()
         schema.append(QgsField("id", QVariant.Int))
 
@@ -1653,15 +1630,6 @@ def joinNEWandValidOSM(
 
     # if there is more than one stop in OSM per GTFS
     # few lines later the closer OSM is taken !!!
-    if len(GTFSss) == len(OSMstops_updated):
-        print("for each GTFS there is an OSM in the " + str(line) + " line ")
-    else:
-        print(
-            "in the "
-            + str(line)
-            + " line, for some GTFS there are more than one OSM, the closest OSM has been kept"
-        )
-
     i_row = 0
     while i_row < len(OSMstops_updated):
         OSMstops_updated.loc[i_row, "line_trip"] = (

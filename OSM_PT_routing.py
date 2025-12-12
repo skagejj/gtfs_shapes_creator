@@ -27,7 +27,6 @@ def if_remove(file_path, files_to_del):
             os.remove(file_path)
         except Exception as e:
             files_to_del["path"].append(file_path)
-            print(f"Error removing file {file_path}: {e}")
     return files_to_del
 
 
@@ -39,14 +38,7 @@ def if_remove_single_file(file_path):
 def save_and_stop_editing_layers(layers):
     for layer in layers:
         if layer.isEditable():
-            if layer.commitChanges():
-                print(f"Changes saved successfully for layer: {layer.name()}")
-            else:
-                print(f"Failed to save changes for layer: {layer.name()}")
-                if not layer.rollBack():
-                    print(f"Failed to rollback changes for layer: {layer.name()}")
-        else:
-            print(f"Layer '{layer.name()}' is not in editing mode.")
+            layer.commitChanges()
 
 
 # Debugging the changing in field type in some step before
@@ -188,11 +180,7 @@ def mini_routing(
             # trying another method
             try:
                 src = unique_mini_tr.loc[IDstr_end_pt, "mini_tr_path"]
-                print(
-                    "copying "
-                    + str(mini_trips.loc[i_row, "mini_tr_pos"])
-                    + " from another mini trip"
-                )
+
                 if os.name == "nt":  # Windows
                     cmd = f'copy "{src}" "{mini_trip_gpkg}"'
                 else:  # Unix/Linux
@@ -204,29 +192,19 @@ def mini_routing(
                 total = total - 1
 
             except:  # in absence of the same mini trip
-                print("creating " + str(mini_trips.loc[i_row, "mini_tr_pos"]))
                 unique_mini_tr.loc[IDstr_end_pt, "mini_tr_path"] = mini_trip_gpkg
-                try:  # generating the mini trip finally!!! yeah!!!
-                    mini_routing_finally(
-                        full_roads_gpgk,
-                        tram_rails_gpgk,
-                        OSM_Regtrain_gpkg,
-                        OSM_funicular_gpkg,
-                        mini_trips,
-                        i_row,
-                        start_point,
-                        end_point,
-                        mini_trip_gpkg,
-                    )
-                except Exception:
-                    os.remove(mini_trip_gpkg)
-                    print(
-                        "something wrong with "
-                        + str(mini_trips.loc[i_row, "mini_tr_pos"])
-                    )
-                    break
-
-            tot, i_row, n_minitr = count_time_left_2(tm0, total, tot, i_row, n_minitr)
+                mini_routing_finally(
+                    full_roads_gpgk,
+                    tram_rails_gpgk,
+                    OSM_Regtrain_gpkg,
+                    OSM_funicular_gpkg,
+                    mini_trips,
+                    i_row,
+                    start_point,
+                    end_point,
+                    mini_trip_gpkg,
+                )
+            tot, i_row, n_minitr = count_time_left_2(tot, i_row, n_minitr)
         if_remove_single_file(unique_mini_tr_csv)
         unique_mini_tr.to_csv(unique_mini_tr_csv)
 
@@ -242,10 +220,6 @@ def mini_routing_finally(
     end_point,
     mini_trip_gpkg,
 ):
-    print(f"start point is {start_point}")
-    print(f"end point is {end_point}")
-    print(f"the file path of the result is {mini_trip_gpkg}")
-
     if "Tram" in str(mini_trips.loc[i_row, "line_name"]):
         if_remove_single_file(mini_trip_gpkg)
         mini_routing_for_rail(tram_rails_gpgk, start_point, end_point, mini_trip_gpkg)
@@ -325,7 +299,6 @@ def temporary_clip_r_network(r_network_gpkg, start_point, end_point):
         max(lat_end, lat_start) + margin_clip,
     )
     extent = f"{est},{west},{south},{north} [EPSG:4326]"
-    print(f"the extent is {extent}")
 
     params = {
         "INPUT": r_network_gpkg,
@@ -356,7 +329,6 @@ def generate_start_end_points_for_ID(mini_trips, i_row):
 
 
 def count_time_left(mini_trips):
-    print("There are " + str(len(mini_trips)) + " mini-trips to calculate")
     tot = len(mini_trips)
     total = tot
     i_row = 0
@@ -365,25 +337,14 @@ def count_time_left(mini_trips):
     return tot, total, i_row, n_minitr, tm0
 
 
-def count_time_left_2(tm0, total, tot, i_row, n_minitr):
-    print("There are " + str(tot) + " mini-trips to calculate")
-    tm1 = time.time()
-    dtm = tm1 - tm0
-    tmtot = dtm / n_minitr * (total)
-    tmrest = tmtot - dtm
-    hours = int(tmrest / 3600)
-    min = int(int(tmrest / 60) - int(tmrest / 3600) * 60)
-    if hours > 0:
-        print("    " + str(hours) + " hours and " + str(min) + " minutes left")
-    else:
-        print("    " + str(min) + " minutes left")
+def count_time_left_2(tot, i_row, n_minitr):
     tot = tot - 1
     i_row += 1
     n_minitr += 1
     return tot, i_row, n_minitr
 
 
-def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
+def trips(trip, trip_gpkg, trip_csv, temp_folder_minitrip):
 
     ls_files_tempfld = os.listdir(temp_folder_minitrip)
     ls_with_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
@@ -392,9 +353,7 @@ def trips(mini_shapes_file, trip, trip_gpkg, trip_csv, temp_folder_minitrip):
     ]
     ls_mini_tr = [file for file in ls_mini_tr_gpkg if trip in file]
 
-    if not ls_mini_tr:
-        print(f"no minitrips find for {trip}")
-    else:  # generate the trips from mini-trips
+    if ls_mini_tr:  # generate the trips from mini-trips
         mini_tr_df_unsorted = pd.DataFrame(ls_mini_tr)
         pattern2 = r"(\d+)\.gpkg$"
         i_row = 0
@@ -726,8 +685,6 @@ def recalulate_lon_lat_from_editing(
             vector_layer.startEditing()
             vector_layer.deleteAttribute(field_index)
             vector_layer.commitChanges()
-        else:
-            print(f"Field '{field_name}' not found.")
 
     pr = vector_layer.dataProvider()
     pr.addAttributes(

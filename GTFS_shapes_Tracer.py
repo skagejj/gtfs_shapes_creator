@@ -5,7 +5,6 @@ from qgis.core import (
     QgsExpression,
     QgsExpressionContext,
     QgsExpressionContextUtils,
-    QgsVectorFileWriter,
 )
 
 import pandas as pd
@@ -33,19 +32,6 @@ def update_trips_list(outputspath):
     return ls_trips_to_display
 
 
-def save_and_stop_editing_layers(layers):
-    for layer in layers:
-        if layer.isEditable():
-            if layer.commitChanges():
-                print(f"Changes saved successfully for layer: {layer.name()}")
-            else:
-                print(f"Failed to save changes for layer: {layer.name()}")
-                if not layer.rollBack():
-                    print(f"Failed to rollback changes for layer: {layer.name()}")
-        else:
-            print(f"Layer '{layer.name()}' is not in editing mode.")
-
-
 def shp_dst_trvl(lines_trips_csv, trip_gpkg, trip_name):
     lines_trips = pd.read_csv(lines_trips_csv, dtype="str", index_col="line_trip")
 
@@ -59,16 +45,12 @@ def shp_dst_trvl(lines_trips_csv, trip_gpkg, trip_name):
         trip_layer.startEditing()
         trip_layer.deleteAttribute(field_index)
         trip_layer.commitChanges()
-    else:
-        print("Field dist_stops not found for " + str(trip_name))
 
-        # ,QgsField("nd2pos", QVariant.Int)
     pr = trip_layer.dataProvider()
     pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
     trip_layer.updateFields()
 
     expression1 = QgsExpression("$length")
-    # expression2 = QgsExpression('regexp_substr( "layer" ,\'(\\d+)$\')')
 
     context = QgsExpressionContext()
     context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(trip_layer))
@@ -276,7 +258,7 @@ def stop_times_update(
                             trips.loc[idx2, "shape_dist_traveled"], 3
                         )
                     except Exception:
-                        print(str(trip_id))
+                        pass
         i_row += 1
 
     # to report the OSM ways-IDs

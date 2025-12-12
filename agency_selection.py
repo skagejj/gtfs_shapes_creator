@@ -48,9 +48,6 @@ def check_gtfs_folder(gtfs_folder_path):
 
 def get_agecy_s_routes(ls_agencies_selected, gtfs_folder_path):
 
-    print("you selected:")
-    for agen in ls_agencies_selected:
-        print(agen)
     agencies_num = [agen.split(" - ")[0] for agen in ls_agencies_selected]
     agencies_folder = "agen"
     agencies_num = [agen.split(" - ")[0] for agen in ls_agencies_selected]

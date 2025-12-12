@@ -33,6 +33,7 @@ from qgis.core import (
     QgsFields,
     QgsField,
     QgsPointXY,
+    Qgis,
 )
 
 from .agency_selection import (
@@ -83,17 +84,17 @@ from .OSM_PT_routing import (
     vector_layer_to_csv,
     recalulate_lon_lat_from_editing,
     vector_layer_to_gpkg,
+    save_and_stop_editing_layers,
 )
 
 from .GTFS_shapes_Tracer import (
     update_trips_list,
-    save_and_stop_editing_layers,
     shp_dst_trvl,
     shape_txt,
     stop_times_update,
 )
 
-from qgis.PyQt.QtWidgets import QListWidgetItem
+from qgis.PyQt.QtWidgets import QListWidgetItem, QApplication, QProgressBar
 import pandas as pd
 import json
 import datetime
@@ -117,7 +118,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def __init__(self, iface, parent=None):
         """Constructor."""
-        super(GtfsShapesCreatorDockWidget, self).__init__(parent)
+        super().__init__(parent)
         # Set up the user interface from Designer.
         # After setupUI you can access any designer object by doing
         # self.<objectname>, and you can use autoconnect slots - see
@@ -198,6 +199,16 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         ls_transport = routes.trnsp_shrt_name.unique()
 
         files_to_del = load_files_to_del(gtfs_folder_path)
+        if files_to_del["path"]:
+            self.iface.messageBar().pushMessage(
+                "Info",
+                self.tr(
+                    f"The temporary files will be deleted only restarting QGIS, their paths are saved on files_to_delete.json"
+                ),
+                level=Qgis.Info,
+                duration=7,
+            )
+
         self.toolBox.setCurrentIndex(1)
         for trnsprt in ls_transport:
             self.listBusWidget.addItem(QListWidgetItem(str(trnsprt)))
@@ -205,9 +216,19 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         return routes, agency_name_fold
 
     def __uploadOSM(self):
-        print(
-            f"at {datetime.datetime.now()} starting the real job: \n - creating agency GTFS folder \n - downloading the OSM rail and road networks  \n - creating the bus network where the bus run faster \n - and only at the end the path for your bus\n... be patient"
+        progressMessageBar = self.iface.messageBar().createMessage(
+            f"Starting at {datetime.datetime.now().time().replace(microsecond=0)} the real job (..be patient, please)"
         )
+        progress = QProgressBar()
+        progress.setMaximum(10)
+        progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        progressMessageBar.layout().addWidget(progress)
+        self.iface.messageBar().pushWidget(progressMessageBar, Qgis.Info)
+        QApplication.processEvents()
+
+        progress.setValue(1)
+        QApplication.processEvents()
+
         selected_items = self.listBusWidget.selectedItems()
 
         # load the folders
@@ -222,7 +243,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             selected_agencies,
             count_all_agencies,
         )
-
+        progress.setValue(2)
+        QApplication.processEvents()
         #    !!! ---- OSMimport_road_PTstops functions ---- !!!
 
         temp_folder = "OSM_data"
@@ -380,14 +402,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         dfnomatch_csv = os.path.join(outputspath, "OSMnomatch.csv")
         GTFSnm_rect_csv = os.path.join(outputspath, "GTFSnm_rect.csv")
         GTFSnmRCT_posdf_csv = os.path.join(outputspath, "GTFSnmRCT_NEWpos.csv")
-        OSM4rout_file = os.path.join(outputspath, "OSM4routing.csv")
 
         GTFSnm_angledf = pd.DataFrame()
         OSMwithGTFS = pd.DataFrame()
         dfnomatch = pd.DataFrame()
         GTFSnm_rect = pd.DataFrame()
         GTFSnmRCT_posdf = pd.DataFrame()
-        OSM4routing = pd.DataFrame()
 
         # condition if the plugin have aleady run at list ones
         if not os.path.exists(main_files_csv):
@@ -436,6 +456,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             Rials_layer = QgsVectorLayer(Rails_layer_file, OSM_tramways_name, "ogr")
             vector_layer_to_gpkg(Rials_layer, OSM_tramways_name, OSM_rails_gpkg)
 
+            progress.setValue(3)
+            QApplication.processEvents()
+
             downloading_railway(
                 extent, extent_quickosm, OSM_Regtrainways_gpkg, "narrow_gauge"
             )
@@ -468,6 +491,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             vector_layer_to_gpkg(
                 funicular_layer, OSM_funicularways_name, OSM_funicular_gpkg
             )
+
+            progress.setValue(4)
+            QApplication.processEvents()
 
             highway_average_speed(OSM_roads_csv, highway_speed_csv)
 
@@ -530,8 +556,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         ls_buses_selected = [item.text() for item in selected_items]
 
-        print("the buses you have choosen are: " + str(ls_buses_selected))
-
         ls_buses = [bus for bus in ls_buses_selected if bus not in prev_ls_buses]
 
         prev_ls_buses = prev_ls_buses + ls_buses
@@ -539,17 +563,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if os.path.exists(ls_buses_done_csv):
             os.remove(ls_buses_done_csv)
         ls_buses_df.to_csv(ls_buses_done_csv, index=False)
+        progress.setValue(5)
+        QApplication.processEvents()
 
         if not os.path.exists(Ttbls_plus_csv):
             Ttbls_plus(Ttlbs_txt, Ttbls_plus_csv, agencies_folder, trips_txt)
 
-        print("Extracting the data of those transports")
         files_to_del = Selected_Ttbls(
             ls_buses, Ttbls_selected_txt, Ttbls_plus_csv, files_to_del
-        )
-
-        print(
-            "the main Time Tables is ready, I start to create the dataframes for each single transport"
         )
 
         stops_times_plus = pd.read_csv(Ttbls_selected_txt)
@@ -591,16 +612,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             )
             lslines.append(nameline)
             i_row += 1
-
-        print("The Time tables are ready")
-
-        if len(stops_times_plus) == sumTtbls:
-            print("all the lines are there")
-        else:
-            dif = len(stops_times_plus) - sumTtbls
-            print(str(dif) + " scores are missing")
-
-        print("prepariing the GTFSstops geopackages")
 
         # creating the a df for listing the files paths
 
@@ -647,6 +658,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             )
 
             i_row += 1
+        progress.setValue(6)
+        QApplication.processEvents()
 
         city_roads_layer = QgsVectorLayer(OSM_roads_gpkg, city_roads_name, "ogr")
 
@@ -659,8 +672,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         city_funicular_layer = QgsVectorLayer(
             OSM_funicular_gpkg, city_funicular_name, "ogr"
         )
-
-        print("... adding the angles to the GTFSstops")
 
         # create GTFSstops gpkg with angle of the nearest road
 
@@ -751,8 +762,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 agency_txt,
             )
             i_row = i_row + 1
-
-        print("Creating vector layers to join to the OSM stops")
 
         buses_long = 0.00020
         tram_long = 0.00080
@@ -879,6 +888,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 lines_df, lines_df_csv, i_row, {"OSM_PTstp": OSM_PTstp_gpkg}
             )
 
+            progress.setValue(7)
+            QApplication.processEvents()
+
             OSM_PTstps_dwnld(
                 extent,
                 extent_quickosm,
@@ -889,9 +901,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 OSM_PTstp_name,
                 trnsprt_type,
             )
-            i_row += 1
 
-        print("joining OSM and GTFS")
+            i_row += 1
 
         i_row = lines_df_row_init
         while i_row < len(lines_df):
@@ -988,8 +999,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         with open(files_to_delete_next_bus_loading_json, "w") as f:
             f.write(files_to_del_str)
         if files_to_del["path"]:
-            print("the files will be deleted only restarting QGIS")
-            print('RESTART QGIS and click again the "Update Transport numbers" button')
+            self.iface.messageBar().pushMessage(
+                "Info",
+                self.tr(
+                    f"The temporary files will be deleted only restarting QGIS, their paths are saved on {files_to_delete_next_bus_loading_json}"
+                ),
+                level=Qgis.Info,
+                duration=7,
+            )
 
         i_row = lines_df_row_init
         while i_row < len(lines_df):
@@ -1076,6 +1093,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
         ]
 
+        progress.setValue(8)
+        QApplication.processEvents()
+
         move_OSMstops_on_the_road(
             temp_OSM_for_routing,
             nmRD_temp_folder,
@@ -1094,6 +1114,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             nmRD_stops_csv,
             ls_to_check,
         )
+
+        progress.setValue(9)
+        QApplication.processEvents()
 
         if not to_check.empty:
             i_row = 0
@@ -1147,9 +1170,24 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             os.remove(lines_df_csv)
         lines_df.to_csv(lines_df_csv, index=False)
 
-        print(f"Done!{datetime.datetime.now()}")
+        progress.setValue(10)
 
     def __OSM_PT_routing(self):
+
+        progressMessageBar = self.iface.messageBar().createMessage(
+            self.tr(
+                f"at {datetime.datetime.now().time().replace(microsecond=0)} : GTFS Shapes Creator has started routing.."
+            )
+        )
+        progress = QProgressBar()
+        progress.setMaximum(5)
+        progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        progressMessageBar.layout().addWidget(progress)
+        self.iface.messageBar().pushWidget(progressMessageBar, Qgis.Info)
+        QApplication.processEvents()
+
+        progress.setValue(1)
+        QApplication.processEvents()
 
         all_layers = QgsProject.instance().mapLayers().values()
         save_and_stop_editing_layers(all_layers)
@@ -1173,6 +1211,15 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         )
 
         files_to_del = load_files_to_del(agencies_folder)
+        if files_to_del["path"]:
+            self.iface.messageBar().pushMessage(
+                "Info",
+                self.tr(
+                    f"The temporary files will be deleted only restarting QGIS, their paths are saved on the files_to_delete.json"
+                ),
+                level=Qgis.Info,
+                duration=7,
+            )
 
         temp_folder = "OSM_data"
         road_temp_folder = os.path.join(agencies_folder, temp_folder)
@@ -1202,10 +1249,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         OSM4routing_csv = os.path.join(outputspath, OSM4routing_name + ".csv")
 
         lines_trips_csv = os.path.join(agencies_folder, "lines_trips.csv")
-
-        shapes_txt = os.path.join(agencies_folder, "shapes.txt")
-
-        trnsprt_shapes = os.path.join(outputspath, "mini_shapes.gpkg")
 
         tempfolder = "temp/mini-trips"
         temp_folder_minitrip = os.path.join(agencies_folder, tempfolder)
@@ -1257,23 +1300,35 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if_remove(OSM4rout_csv, files_to_del)
         vector_layer_to_csv(OSM4rout_layer, OSM4rout_csv)
 
-        print("creating mini-trips table")
+        progress.setValue(2)
+        QApplication.processEvents()
 
         # create mini trips
         defining_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv)
-
-        print("Start routing from start to end for each mini-trip")
         # routing
-        mini_routing(
-            OSM4routing_csv,
-            full_roads_gpgk,
-            tram_rails_gpgk,
-            OSM_Regtrain_gpkg,
-            OSM_funicular_gpkg,
-            temp_folder_minitrip,
-        )
+        try:
+            mini_routing(
+                OSM4routing_csv,
+                full_roads_gpgk,
+                tram_rails_gpgk,
+                OSM_Regtrain_gpkg,
+                OSM_funicular_gpkg,
+                temp_folder_minitrip,
+            )
+        except Exception:
+            self.iface.messageBar().pushMessage(
+                "Warning",
+                self.tr(
+                    "Something wrong went creating the trips, GO BACK to step 1, remove the buses concerned and try again"
+                ),
+                level=Qgis.Warning,
+            )
 
         lines_trips = pd.read_csv(lines_trips_csv)
+
+        progress.setValue(3)
+        QApplication.processEvents()
+
         display_OSM_and_SWISSTOPO_IMAGE_maps()
         if_display_r_layer(full_roads_gpgk, full_roads_name)
 
@@ -1283,7 +1338,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         if_display_r_layer(OSM_funicular_gpkg, OSM_funicular_name)
 
-        print("now it makes one file for each trip, it will take shorter time")
         takeoff_ = lambda a: "".join([x for x in list(a) if x != "_"])
         ls_selected_line_names = [takeoff_(x) for x in ls_buses_selected]
         idx = 0
@@ -1295,8 +1349,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             lines_trips.loc[idx, "gpkg"] = trip_gpkg
             lines_trips.loc[idx, "csv"] = trip_csv
             if not os.path.exists(trip_gpkg):
-                print(str(trip) + "  is merging all its mini-trips")
-                trips(trnsprt_shapes, trip, trip_gpkg, trip_csv, temp_folder_minitrip)
+                trips(trip, trip_gpkg, trip_csv, temp_folder_minitrip)
 
             if [x for x in ls_selected_line_names if x in trip]:
                 if not QgsProject.instance().mapLayersByName(str(trip)):
@@ -1322,12 +1375,15 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             i_row = 0
             while i_row < len(missing):
                 trip = missing.loc[i_row, "line_trip"]
-                print(str(trip) + " is missing")
                 i_row += 1
-        else:
-            print("All Trips are ready for tracing their shape!")
+                self.iface.messageBar().pushMessage(
+                    "Warning", self.tr(f"{trip} is missing"), level=Qgis.Warning
+                )
 
         self.tripsListWidget.clear()  # Clear existing items
+
+        progress.setValue(4)
+        QApplication.processEvents()
 
         ls_trips_to_display = update_trips_list(outputspath)
 
@@ -1336,7 +1392,25 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         self.toolBox.setCurrentIndex(3)
 
+        progress.setValue(5)
+        QApplication.processEvents()
+
     def __shapesCreator(self):
+
+        progressMessageBar = self.iface.messageBar().createMessage(
+            self.tr(
+                f"at {datetime.datetime.now().time().replace(microsecond=0)} : Integrating the shapes to the GTFS file take much less time"
+            )
+        )
+        progress = QProgressBar()
+        progress.setMaximum(3)
+        progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        progressMessageBar.layout().addWidget(progress)
+        self.iface.messageBar().pushWidget(progressMessageBar, Qgis.Info)
+        QApplication.processEvents()
+
+        progress.setValue(1)
+        QApplication.processEvents()
         # load the folders
         gtfs_folder_path = self.mGtfsFolderWidget.filePath()
         selected_agencies = self.listAgenciesWidget.selectedItems()
@@ -1385,6 +1459,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         ls_trip_to_shape = [
             file for file in ls_with_gpkg if "shm" not in file and "wal" not in file
         ]
+        progress.setValue(2)
+        QApplication.processEvents()
 
         for trip_to_shape in ls_trip_to_shape:
             trip_gpkg = os.path.join(outputspath, trip_to_shape)
@@ -1420,6 +1496,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             )
             Ttbls_with_seq = pd.concat([Ttbls_with_seq, Ttbl_with_seq])
             shapes = pd.concat([shapes, trip], ignore_index=True)
+
+        progress.setValue(2)
+        QApplication.processEvents()
 
         shapes = shapes.rename(
             columns={
@@ -1462,6 +1541,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             calendar_txt,
             calendar_dates_txt,
         ]
+
+        progress.setValue(3)
+        QApplication.processEvents()
+
         with zipfile.ZipFile(zip_file, "w") as zipMe:
             for file in lista_files:
                 zipMe.write(
@@ -1470,7 +1553,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     compress_type=zipfile.ZIP_DEFLATED,
                 )
 
-        print("shapes.txt is ready!")
+        self.iface.messageBar().pushMessage(
+            "Info",
+            self.tr(f"It's DONE! Find your file in {zip_file}, CONGRATULATION!"),
+            level=Qgis.Info,
+            duration=120,
+        )
 
     def __ZoomStop(self):
 
@@ -1495,9 +1583,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         to_check = pd.read_csv(nmRD_stops_csv, index_col="seq_stpID")
         selected_item = self.stopsnmRDlistWidget.currentItem().text()
-        print(selected_item)
-
-        print(to_check.at[selected_item, "lat"])
 
         latitude = float(to_check.at[selected_item, "lat"])
         longitude = float(to_check.at[selected_item, "lon"])
@@ -1534,6 +1619,15 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         )
 
         files_to_del = load_files_to_del(agencies_folder)
+        if files_to_del["path"]:
+            self.iface.messageBar().pushMessage(
+                "Info",
+                self.tr(
+                    f"The temporary files will be deleted only restarting QGIS, their paths are saved on {files_to_delete_next_bus_loading_json}"
+                ),
+                level=Qgis.Info,
+                duration=7,
+            )
 
         lines_df_csv = os.path.join(str(agencies_folder), "lines_files_list.csv")
 
@@ -1564,7 +1658,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             try:
                 buses_done = buses_done.drop(line)
             except Exception:
-                print("you have never run the plugins with the " + str(line))
+                self.iframe.messageBar().pushMessage(
+                    "Info",
+                    self.tr("you have never run the plugins with the " + str(line)),
+                    level=Qgis.Info,
+                    duration=7,
+                )
 
         lines_df = pd.read_csv(lines_df_csv, dtype="str", index_col="line_name")
 
@@ -1572,9 +1671,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             uq_mn_trips = pd.read_csv(uq_mn_trips_csv)
 
         ls_files = lines_df.columns
-        print(
-            f"deleting all transport with line_name as {line_name} from the uq_mini_trip file and files"
-        )
 
         for line_name in ls_lines_names:
             if os.path.exists(uq_mn_trips_csv):
@@ -1591,17 +1687,29 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     path_to_del = lines_df.loc[line_name, file]
                     files_to_del = if_remove(path_to_del, files_to_del)
                 except Exception:
-                    print(
-                        "the "
-                        + str(line_name)
-                        + "'s \""
-                        + str(file)
-                        + "\" hasn't produced yet"
+                    self.iface.messageBar().pushMessage(
+                        "Info",
+                        self.tr(
+                            "the "
+                            + str(line_name)
+                            + "'s \""
+                            + str(file)
+                            + "\" hasn't produced yet"
+                        ),
+                        level=Qgis.Info,
+                        duration=7,
                     )
             try:
                 lines_df = lines_df.drop(line_name)
             except Exception:
-                print("you have never run the plugins with the " + str(line_name))
+                self.iface.messageBar().pushMessage(
+                    "Info",
+                    self.tr(
+                        "you have never run the plugins with the " + str(line_name)
+                    ),
+                    level=Qgis.Info,
+                    duration=7,
+                )
 
         files_to_del = if_remove(lines_df_csv, files_to_del)
         lines_df.to_csv(lines_df_csv)
@@ -1613,18 +1721,28 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if_remove(uq_mn_trips_csv, files_to_del)
             uq_mn_trips.to_csv(uq_mn_trips_csv, index=False)
 
-        founds = []
         for line_name in ls_lines_names:
             for found in find("*" + str(line_name) + "*", agencies_folder):
                 files_to_del = if_remove(found, files_to_del)
-            print("the " + str(line_name) + " has been removed sucessfully")
+            self.iface.messageBar().pushMessage(
+                "Info",
+                self.tr("the " + str(line_name) + " has been removed sucessfully"),
+                level=Qgis.Info,
+                duration=30,
+            )
 
         files_to_del_str = json.dumps(files_to_del, indent=2)
         with open(files_to_delete_next_bus_loading_json, "w") as f:
             f.write(files_to_del_str)
         if files_to_del["path"]:
-            print("the files will be deleted only restarting QGIS")
-            print('RESTART QGIS and click again the "Remove selected lines" button')
+            self.iface.messageBar().pushMessage(
+                "Info",
+                self.tr(
+                    f"The temporary files will be deleted only restarting QGIS, their paths are saved on {files_to_delete_next_bus_loading_json}"
+                ),
+                level=Qgis.Info,
+                duration=7,
+            )
 
     def __displayTrips(self):
         gtfs_folder_path = self.mGtfsFolderWidget.filePath()
