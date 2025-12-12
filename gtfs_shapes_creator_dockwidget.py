@@ -173,7 +173,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             it.setHidden(it not in match_items)
 
     def __updateBuses(self):
-
+        bar_for_messages = self.iface.messageBar()
+        bar_for_messages.setMinimumHeight(150)
         selected_items = self.listAgenciesWidget.selectedItems()
 
         gtfs_folder_path = self.mGtfsFolderWidget.filePath()
@@ -200,7 +201,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         files_to_del = load_files_to_del(gtfs_folder_path)
         if files_to_del["path"]:
-            self.iface.messageBar().pushMessage(
+            bar_for_messages.pushMessage(
                 "Info",
                 self.tr(
                     f"The temporary files will be deleted only restarting QGIS, their paths are saved on files_to_delete.json"
@@ -216,14 +217,18 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         return routes, agency_name_fold
 
     def __uploadOSM(self):
-        progressMessageBar = self.iface.messageBar().createMessage(
-            f"Starting at {datetime.datetime.now().time().replace(microsecond=0)} the real job (..be patient, please)"
+        bar_for_messages = self.iface.messageBar()
+        bar_for_messages.setMinimumHeight(150)
+        progressMessageBar = bar_for_messages.createMessage(
+            self.tr(
+                f"Starting at {datetime.datetime.now().time().replace(microsecond=0)} the real job (..be patient, please)"
+            )
         )
         progress = QProgressBar()
         progress.setMaximum(10)
         progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         progressMessageBar.layout().addWidget(progress)
-        self.iface.messageBar().pushWidget(progressMessageBar, Qgis.Info)
+        bar_for_messages.pushWidget(progressMessageBar, Qgis.Info)
         QApplication.processEvents()
 
         progress.setValue(1)
@@ -999,7 +1004,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         with open(files_to_delete_next_bus_loading_json, "w") as f:
             f.write(files_to_del_str)
         if files_to_del["path"]:
-            self.iface.messageBar().pushMessage(
+            bar_for_messages.pushMessage(
                 "Info",
                 self.tr(
                     f"The temporary files will be deleted only restarting QGIS, their paths are saved on {files_to_delete_next_bus_loading_json}"
@@ -1171,10 +1176,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         lines_df.to_csv(lines_df_csv, index=False)
 
         progress.setValue(10)
+        bar_for_messages.clearWidgets()
 
     def __OSM_PT_routing(self):
-
-        progressMessageBar = self.iface.messageBar().createMessage(
+        bar_for_messages = self.iface.messageBar()
+        bar_for_messages.setMinimumHeight(150)
+        progressMessageBar = bar_for_messages.createMessage(
             self.tr(
                 f"at {datetime.datetime.now().time().replace(microsecond=0)} : GTFS Shapes Creator has started routing.."
             )
@@ -1183,7 +1190,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         progress.setMaximum(5)
         progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         progressMessageBar.layout().addWidget(progress)
-        self.iface.messageBar().pushWidget(progressMessageBar, Qgis.Info)
+        bar_for_messages.pushWidget(progressMessageBar, Qgis.Info)
         QApplication.processEvents()
 
         progress.setValue(1)
@@ -1212,7 +1219,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         files_to_del = load_files_to_del(agencies_folder)
         if files_to_del["path"]:
-            self.iface.messageBar().pushMessage(
+            bar_for_messages.pushMessage(
                 "Info",
                 self.tr(
                     f"The temporary files will be deleted only restarting QGIS, their paths are saved on the files_to_delete.json"
@@ -1316,7 +1323,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 temp_folder_minitrip,
             )
         except Exception:
-            self.iface.messageBar().pushMessage(
+            bar_for_messages.pushMessage(
                 "Warning",
                 self.tr(
                     "Something wrong went creating the trips, GO BACK to step 1, remove the buses concerned and try again"
@@ -1376,7 +1383,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             while i_row < len(missing):
                 trip = missing.loc[i_row, "line_trip"]
                 i_row += 1
-                self.iface.messageBar().pushMessage(
+                bar_for_messages.pushMessage(
                     "Warning", self.tr(f"{trip} is missing"), level=Qgis.Warning
                 )
 
@@ -1394,10 +1401,12 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         progress.setValue(5)
         QApplication.processEvents()
+        bar_for_messages.clearWidgets()
 
     def __shapesCreator(self):
-
-        progressMessageBar = self.iface.messageBar().createMessage(
+        bar_for_messages = self.iface.messageBar()
+        bar_for_messages.setMinimumHeight(150)
+        progressMessageBar = bar_for_messages.createMessage(
             self.tr(
                 f"at {datetime.datetime.now().time().replace(microsecond=0)} : Integrating the shapes to the GTFS file take much less time"
             )
@@ -1406,7 +1415,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         progress.setMaximum(3)
         progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         progressMessageBar.layout().addWidget(progress)
-        self.iface.messageBar().pushWidget(progressMessageBar, Qgis.Info)
+        bar_for_messages.pushWidget(progressMessageBar, Qgis.Info)
         QApplication.processEvents()
 
         progress.setValue(1)
@@ -1553,7 +1562,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     compress_type=zipfile.ZIP_DEFLATED,
                 )
 
-        self.iface.messageBar().pushMessage(
+        bar_for_messages.pushMessage(
             "Info",
             self.tr(f"It's DONE! Find your file in {zip_file}, CONGRATULATION!"),
             level=Qgis.Info,
@@ -1597,6 +1606,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         canvas.refresh()
 
     def __removeBuses(self):
+        bar_for_messages = self.iface.messageBar()
+        bar_for_messages.setMinimumHeight(150)
+
         gtfs_folder_path = self.mGtfsFolderWidget.filePath()
 
         selected_agencies = self.listAgenciesWidget.selectedItems()
@@ -1620,7 +1632,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         files_to_del = load_files_to_del(agencies_folder)
         if files_to_del["path"]:
-            self.iface.messageBar().pushMessage(
+            bar_for_messages.pushMessage(
                 "Info",
                 self.tr(
                     f"The temporary files will be deleted only restarting QGIS, their paths are saved on {files_to_delete_next_bus_loading_json}"
@@ -1687,7 +1699,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     path_to_del = lines_df.loc[line_name, file]
                     files_to_del = if_remove(path_to_del, files_to_del)
                 except Exception:
-                    self.iface.messageBar().pushMessage(
+                    bar_for_messages.pushMessage(
                         "Info",
                         self.tr(
                             "the "
@@ -1702,7 +1714,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             try:
                 lines_df = lines_df.drop(line_name)
             except Exception:
-                self.iface.messageBar().pushMessage(
+                bar_for_messages.pushMessage(
                     "Info",
                     self.tr(
                         "you have never run the plugins with the " + str(line_name)
@@ -1724,7 +1736,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         for line_name in ls_lines_names:
             for found in find("*" + str(line_name) + "*", agencies_folder):
                 files_to_del = if_remove(found, files_to_del)
-            self.iface.messageBar().pushMessage(
+            bar_for_messages.pushMessage(
                 "Info",
                 self.tr("the " + str(line_name) + " has been removed sucessfully"),
                 level=Qgis.Info,
@@ -1735,7 +1747,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         with open(files_to_delete_next_bus_loading_json, "w") as f:
             f.write(files_to_del_str)
         if files_to_del["path"]:
-            self.iface.messageBar().pushMessage(
+            bar_for_messages.pushMessage(
                 "Info",
                 self.tr(
                     f"The temporary files will be deleted only restarting QGIS, their paths are saved on {files_to_delete_next_bus_loading_json}"
