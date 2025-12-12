@@ -9,6 +9,7 @@ description=Generates GTFS shapes.txt files by routing transit lines on OpenStre
 version=0.1
 author=Luigi Dal Bosco
 email=luigi.dalbosco@gmail.com
+license=LGPL-3.0-or-later
 
 about=The GTFS Shapes Creator plugin for QGIS enables users to generate public transport routes from opentransportdata.swiss GTFS datasets using OpenStreetMap (OSM) road and rail networks. The plugin automatically computes the trajectories of buses, trams, trains, and funiculars between each pair of consecutive stops along their dedicated infrastructure. It provides a step-by-step workflow to import the data, validate it, calculate the routes, and automatically generate the shapes.txt file (integrated back into the original GTFS), which can be used for visualization in MaaS applications, such as FlowRide. Currently configured for the regions of Geneva, Nyon, and Morges (in Switzerland), the tool can be adapted for other cities upon request.
 
