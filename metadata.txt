@@ -1,48 +1,52 @@
-# This file contains metadata for your plugin.
-
-# This file should be included when you package your plugin.# Mandatory items:
+; This file contains metadata for your plugin.
+; All metadata must be in UTF-8 encoding.
+; the next section is mandatory
 
 [general]
-name=GTFS Shapes Creator
-qgisMinimumVersion=3.0
-description=Generates GTFS shapes.txt files by routing transit lines on OpenStreetMap road and rail networks, with current support for opentransportdata.swiss
-version=0.1
+name=GtfsShapesCreator
 author=Luigi Dal Bosco
 email=luigi.dalbosco@gmail.com
-license=LGPL-3.0-or-later
+qgisMinimumVersion=3.0
+description=Generates GTFS shapes.txt files by routing transit lines on OpenStreetMap road and rail networks, with current support for opentransportdata.swiss
+about=The GTFS Shapes Creator plugin for QGIS enables users to generate public transport routes from opentransportdata.swiss GTFS datasets using OpenStreetMap (OSM) road and rail networks. The plugin automatically computes the trajectories of buses, trams, trains, and funiculars between each pair of consecutive stops along their dedicated infrastructure. It provides a step-by-step workflow to:
+    - import the data, 
+    - validate it, 
+    - calculate the routes, and 
+    - automatically generate the shapes.txt file (integrated back into the original GTFS), which can be used for visualization in MaaS applications, such as FlowRide.
+    Currently configured for the regions of Geneva, Nyon, and Morges (in Switzerland), the tool can be adapted for other cities upon request.
+version=version 1.0
 
-about=The GTFS Shapes Creator plugin for QGIS enables users to generate public transport routes from opentransportdata.swiss GTFS datasets using OpenStreetMap (OSM) road and rail networks. The plugin automatically computes the trajectories of buses, trams, trains, and funiculars between each pair of consecutive stops along their dedicated infrastructure. It provides a step-by-step workflow to import the data, validate it, calculate the routes, and automatically generate the shapes.txt file (integrated back into the original GTFS), which can be used for visualization in MaaS applications, such as FlowRide. Currently configured for the regions of Geneva, Nyon, and Morges (in Switzerland), the tool can be adapted for other cities upon request.
+license=LGPL-3.0-or-later
 
 tracker=https://github.com/skagejj/gtfs_shapes_creator/issues
 repository=https://github.com/skagejj/gtfs_shapes_creator
 
-# End of mandatory metadata
 
-# Recommended items:
+; end of mandatory metadata
 
-hasProcessingProvider=no
-# Uncomment the following line and add your changelog:
-changelog=Initial public release.
-
-# Tags are comma separated with spaces allowed
-tags=GTFS, public transport, , OpenStreetMap, OSM, routing, shapes.txt, transit
-
-homepage=https://github.com/skagejj/gtfs_shapes_creator
+; start of optional metadata
 category=Vector
+changelog=1.0 - First stable release
+
+
+; Tags are in comma separated value format, spaces are allowed within the
+; tag name.
+; Tags should be in English language. Please also check for existing tags and
+; synonyms before creating a new one.
+tags=GTFS, public transport, OpenStreetMap, OSM, routing, shapes.txt, transit
+
+; these metadata can be empty, they will eventually become mandatory.
+homepage=https://github.com/skagejj/gtfs_shapes_creator
 icon=icon.png
-# experimental flag
+
+
+; Optional flags and extended metadata
+hasProcessingProvider=False
+
+
 experimental=False
-
-# deprecated flag (applies to the whole plugin, not just a single version)
 deprecated=False
-
-# Since QGIS 3.8, a comma separated list of plugins to be installed
-# (or upgraded) can be specified.
-# Check the documentation for more information.
-plugin_dependencies=QuickOSM
-
-Category of the plugin: Raster, Vector, Database or Web
-# category=
-
-# If the plugin can run on QGIS Server.
 server=False
+
+; Since QGIS 3.8: comma-separated list of required plugins
+plugin_dependencies=QuickOSM
