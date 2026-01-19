@@ -170,9 +170,10 @@ def mini_routing(
             if start_point == end_point:
                 i_row += 1
                 continue
+            mini_trip_name = str(mini_trips.loc[i_row, "mini_tr_pos"])
             mini_trip_gpkg = os.path.join(
                 temp_folder_minitrip,
-                str(mini_trips.loc[i_row, "mini_tr_pos"]) + ".gpkg",
+                mini_trip_name + ".gpkg",
             )
 
             IDstr_end_pt = str(start_point) + " " + str(end_point)
@@ -203,6 +204,7 @@ def mini_routing(
                     start_point,
                     end_point,
                     mini_trip_gpkg,
+                    mini_trip_name,
                 )
             tot, i_row, n_minitr = count_time_left_2(tot, i_row, n_minitr)
         if_remove_single_file(unique_mini_tr_csv)
@@ -219,6 +221,7 @@ def mini_routing_finally(
     start_point,
     end_point,
     mini_trip_gpkg,
+    mini_trip_name,
 ):
     if "Tram" in str(mini_trips.loc[i_row, "line_name"]):
         if_remove_single_file(mini_trip_gpkg)
@@ -242,30 +245,53 @@ def mini_routing_finally(
         )
 
     else:
-        temp_path = temporary_clip_r_network(full_roads_gpgk, start_point, end_point)
         if_remove_single_file(mini_trip_gpkg)
-        params = {
-            "INPUT": temp_path,
-            "STRATEGY": 1,
-            "DIRECTION_FIELD": "oneway_routing",
-            "VALUE_FORWARD": "forward",
-            "VALUE_BACKWARD": "backward",
-            "VALUE_BOTH": "",
-            "DEFAULT_DIRECTION": 2,
-            "SPEED_FIELD": "maxspeed_routing",
-            "DEFAULT_SPEED": 50,
-            "TOLERANCE": 0,
-            "START_POINT": start_point,
-            "END_POINT": end_point,
-            "OUTPUT": mini_trip_gpkg,
-        }
-        processing.run("native:shortestpathpointtopoint", params)
+        clip_margin = 0.006
+
+        mini_trip_to_check = mini_routing_bus_final(
+            full_roads_gpgk, start_point, end_point, clip_margin
+        )
+
+        # verify if the mini_trip_gpkg is not empty
+        # if empty grew the margin_clip
+        while not mini_trip_to_check:
+            clip_margin = clip_margin + 0.01
+            mini_trip_to_check = mini_routing_bus_final(
+                full_roads_gpgk, start_point, end_point, clip_margin
+            )
+
+        vector_layer_to_gpkg(mini_trip_to_check, mini_trip_name, mini_trip_gpkg)
+
+
+def mini_routing_bus_final(full_roads_gpgk, start_point, end_point, clip_margin):
+    temp_path = temporary_clip_r_network(
+        full_roads_gpgk, start_point, end_point, clip_margin
+    )
+    params = {
+        "INPUT": temp_path,
+        "STRATEGY": 1,
+        "DIRECTION_FIELD": "oneway_routing",
+        "VALUE_FORWARD": "forward",
+        "VALUE_BACKWARD": "backward",
+        "VALUE_BOTH": "",
+        "DEFAULT_DIRECTION": 2,
+        "SPEED_FIELD": "maxspeed_routing",
+        "DEFAULT_SPEED": 50,
+        "TOLERANCE": 0,
+        "START_POINT": start_point,
+        "END_POINT": end_point,
+        "OUTPUT": "TEMPORARY_OUTPUT",
+    }
+    try:
+        temporary_mini_trip = processing.run("native:shortestpathpointtopoint", params)
+        return temporary_mini_trip["OUTPUT"]
+    except:
+        return None
 
 
 def mini_routing_for_rail(rail_network_gpkg, start_point, end_point, mini_trip_gpkg):
-    temp_path = temporary_clip_r_network(rail_network_gpkg, start_point, end_point)
     params = {
-        "INPUT": temp_path,
+        "INPUT": rail_network_gpkg,
         "STRATEGY": 0,
         "DIRECTION_FIELD": "",
         "VALUE_FORWARD": "",
@@ -282,15 +308,13 @@ def mini_routing_for_rail(rail_network_gpkg, start_point, end_point, mini_trip_g
     processing.run("native:shortestpathpointtopoint", params)
 
 
-def temporary_clip_r_network(r_network_gpkg, start_point, end_point):
+def temporary_clip_r_network(r_network_gpkg, start_point, end_point, margin_clip):
     lon_start, lat_start = float(start_point.split(",")[0]), float(
         start_point.split(",")[1].split(" ")[0]
     )
     lon_end, lat_end = float(end_point.split(",")[0]), float(
         end_point.split(",")[1].split(" ")[0]
     )
-
-    margin_clip = 0.01
 
     est, south, west, north = (
         min(lon_end, lon_start) - margin_clip,
