@@ -364,7 +364,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         user_name = getpass.getuser() or "user"
         temp_folder = f"{user_name}_main_files"
         main_files_fld = os.path.join(agencies_folder, temp_folder)
-        main_files_csv = os.path.join(agencies_folder, temp_folder + "main_files.csv")
+        main_files_csv = os.path.join(agencies_folder, temp_folder, "main_files.csv")
 
         temp_folder = "temp/trip_id_assignement"
         folder_trip_id_assign = os.path.join(agencies_folder, temp_folder)
@@ -784,10 +784,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 temp_rect_folder, "GTFSangl_sidewalk_" + str(line) + ".csv"
             )
 
-            GTFSstps_rect_sidewalk_gpkg = (
-                os.path.join(temp_rect_folder),
-                "rects_sidewalk_" + str(line) + ".gpkg",
+            GTFSstps_rect_sidewalk_gpkg = os.path.join(
+                temp_rect_folder, "rects_sidewalk_" + str(line) + ".gpkg"
             )
+
             GTFSstops_angle_sidewalk_layer = QgsVectorLayer(
                 GTFSstops_angle_sidewalk_gpkg,
                 "GTFS" + str(line) + "_anlge_sidewalk",
