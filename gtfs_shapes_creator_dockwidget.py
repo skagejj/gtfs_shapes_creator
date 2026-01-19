@@ -1326,7 +1326,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             bar_for_messages.pushMessage(
                 "Warning",
                 self.tr(
-                    "Something wrong went creating the trips, GO BACK to step 1, remove the buses concerned and try again"
+                    "Something wrong while creating the trips, GO BACK to step 1, remove the buses concerned and try again"
                 ),
                 level=Qgis.Warning,
             )
