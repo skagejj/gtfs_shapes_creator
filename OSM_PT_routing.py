@@ -8,6 +8,9 @@ from qgis.core import (
     QgsExpressionContextUtils,
     edit,
     QgsCoordinateTransformContext,
+    QgsFeature,
+    QgsGeometry,
+    QgsPointXY,
 )
 
 import pandas as pd
@@ -254,13 +257,61 @@ def mini_routing_finally(
 
         # verify if the mini_trip_gpkg is not empty
         # if empty grew the margin_clip
-        while not mini_trip_to_check:
+        while not mini_trip_to_check and clip_margin < 0.08:
             clip_margin = clip_margin + 0.01
             mini_trip_to_check = mini_routing_bus_final(
                 full_roads_gpgk, start_point, end_point, clip_margin
             )
 
+        if not mini_trip_to_check:
+            print(f"generating a segment for the mini trip {mini_trip_name}")
+            mini_trip_to_check = generate_start_end_segment(
+                start_point, end_point, mini_trip_name
+            )
+
         vector_layer_to_gpkg(mini_trip_to_check, mini_trip_name, mini_trip_gpkg)
+
+
+def generate_start_end_segment(
+    start_point_to_strip, end_point_to_strip, mini_trip_name
+):
+    layer = QgsVectorLayer("LineString?crs=EPSG:4326", mini_trip_name, "memory")
+    lon_start, lat_start = float(start_point_to_strip.split(",")[0]), float(
+        start_point_to_strip.split(",")[1].split(" ")[0]
+    )
+    lon_end, lat_end = float(end_point_to_strip.split(",")[0]), float(
+        end_point_to_strip.split(",")[1].split(" ")[0]
+    )
+    start_point = QgsPointXY(lon_start, lat_start)
+    end_point = QgsPointXY(lon_end, lat_end)
+    provider = layer.dataProvider()
+    # Add attribute fields
+    provider.addAttributes(
+        [
+            QgsField("fid", QVariant.Int),
+            QgsField("start", QVariant.String),
+            QgsField("end", QVariant.String),
+            QgsField("cost", QVariant.Int),
+        ]
+    )
+    layer.updateFields()
+
+    # Create geometry
+    line_geom = QgsGeometry.fromPolylineXY([start_point, end_point])
+
+    # Create feature
+    feature = QgsFeature(layer.fields())
+    feature.setGeometry(line_geom)
+
+    # Set attribute values
+    feature["fid"] = 1
+    feature["start"] = f"{start_point.x()},{start_point.y()}"
+    feature["end"] = f"{end_point.x()},{end_point.y()}"
+    feature["cost"] = 2
+    # Add feature to layer
+    provider.addFeatures([feature])
+    layer.updateExtents()
+    return layer
 
 
 def mini_routing_bus_final(full_roads_gpgk, start_point, end_point, clip_margin):
