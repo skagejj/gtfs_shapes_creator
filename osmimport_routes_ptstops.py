@@ -28,8 +28,6 @@ import fnmatch
 import math
 import statistics as stat
 import time
-import datetime
-from urllib.parse import urlencode
 from .OSM_PT_routing import (
     if_remove_single_file,
     vector_layer_to_csv,
@@ -40,6 +38,15 @@ from .OSM_PT_routing import (
 def if_not_make(folders_to_make: list):
     for folder in folders_to_make:
         os.makedirs(folder, exist_ok=True)
+
+
+def if_csv_exist_else_df_empty(file_csv):
+    if os.path.exists(file_csv):
+        try:
+            GTFSnmRCT_posdf = pd.read_csv(file_csv)
+        except:
+            GTFSnmRCT_posdf = pd.DataFrame()
+    return GTFSnmRCT_posdf
 
 
 def load_files_to_del(agencies_folder):
@@ -91,8 +98,8 @@ def quickOSM_API(params):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            processing.run("quickosm:downloadosmdatarawquery", params)
-            break
+            result = processing.run("quickosm:downloadosmdatarawquery", params)
+            return result["OUTPUT_LINES"]
         except Exception as e:
             if "Gateway Timeout" in str(e) or "NetWorkErrorException" in str(e):
                 if attempt < max_retries - 1:
@@ -107,48 +114,61 @@ def quickOSM_API(params):
                 raise
 
 
-def downloading_ways(extent, extent_quickosm, OSM_ways_gpkg):
+def downloading_ways(extent, extent_quickosm):
+
+    highway_types = [
+        "service",
+        "living_street",
+        "motorway",
+        "primary",
+        "secondary",
+        "tertiary",
+        "residential",
+        "unclassified",
+        "motorway_link",
+        "primary_link",
+        "secondary_link",
+        "tertiary_link",
+        "residential",
+        "motorway_junction",
+    ]
+    query = (
+        '[out:xml] [timeout:25];\n(    \n    way["highway"="' + highway_types[0] + '"]('
+    )
+    for highway in highway_types[1:]:
+        query = query + str(extent) + ');\n    way["highway"="' + highway + '"]('
+    query = query + str(extent) + ");\n    \n  \t\n);\n(._;>;);\nout body;"
+
     params = {
-        "QUERY": '[out:xml] [timeout:25];\n(    \n    way["highway"="service"]('
-        + str(extent)
-        + ');\n    way["highway"="living_street"]('
-        + str(extent)
-        + ');\n    way["highway"="motorway"]('
-        + str(extent)
-        + ');\n    way["highway"="primary"]('
-        + str(extent)
-        + ');\n    way["highway"="secondary"]('
-        + str(extent)
-        + ');\n    way["highway"="tertiary"]('
-        + str(extent)
-        + ');\n    way["highway"="residential"]('
-        + str(extent)
-        + ');\n    way["highway"="unclassified"]('
-        + str(extent)
-        + ');\n    way["highway"="motorway_link"]('
-        + str(extent)
-        + ');\n    way["highway"="primary_link"]('
-        + str(extent)
-        + ');\n    way["highway"="secondary_link"]('
-        + str(extent)
-        + ');\n    way["highway"="tertiary_link"]('
-        + str(extent)
-        + ');\n    way["highway"="residential"]('
-        + str(extent)
-        + ');\n    way["highway"="motorway_junction"]('
+        "QUERY": query,
+        "TIMEOUT": 180,
+        "SERVER": "https://overpass-api.de/api/interpreter",
+        "EXTENT": extent_quickosm,
+        "AREA": "",
+        "FILE": "TEMPORARY_OUTPUT",
+    }
+
+    return quickOSM_API(params)
+
+
+def downloading_ferryroutes(extent, extent_quickosm, trnsprt):
+
+    params = {
+        "QUERY": '[out:xml] [timeout:25];\n(    \n    way["route"="'
+        + str(trnsprt)
+        + '"]('
         + str(extent)
         + ");\n    \n  \t\n);\n(._;>;);\nout body;",
         "TIMEOUT": 180,
         "SERVER": "https://overpass-api.de/api/interpreter",
         "EXTENT": extent_quickosm,
         "AREA": "",
-        "FILE": OSM_ways_gpkg,
+        "FILE": "TEMPORARY_OUTPUT",
     }
-    quickOSM_API(params)
+    return quickOSM_API(params)
 
 
-def downloading_railway(extent, extent_quickosm, OSM_tramways_gpkg, trnsprt):
-
+def downloading_railway(extent, extent_quickosm, trnsprt):
     params = {
         "QUERY": '[out:xml] [timeout:25];\n(    \n    way["railway"="'
         + str(trnsprt)
@@ -159,9 +179,9 @@ def downloading_railway(extent, extent_quickosm, OSM_tramways_gpkg, trnsprt):
         "SERVER": "https://overpass-api.de/api/interpreter",
         "EXTENT": extent_quickosm,
         "AREA": "",
-        "FILE": OSM_tramways_gpkg,
+        "FILE": "TEMPORARY_OUTPUT",
     }
-    quickOSM_API(params)
+    return quickOSM_API(params)
 
 
 def highway_average_speed(OSM_roads_csv, highway_speed_csv):
@@ -350,12 +370,6 @@ def join_oneway_maxspeed_routing_to_vl(
         ["full_id", "oneway_routing", "maxspeed_routing"]
     ].to_csv(oneway_new_speed_csv, index=False)
 
-    # uri = f"file:///{oneway_new_speed_csv}?type=csv&detectTypes=yes&geomType=none&delimiter=,"
-    # if os.name == "nt":  # Windows
-    #     csv_path = oneway_new_speed_csv.replace("\\", "/")
-    #     uri = f"file:///{csv_path}?type=csv&detectTypes=yes&geomType=none&delimiter=,"
-
-    # join_attributes_layer = QgsVectorLayer(uri, "bl_oneway_new_speed", "delimitedtext")
     output_mempry_layer = "TEMPORARY_OUTPUT" if os.name == "nt" else "memory:"
     result = processing.run(
         "native:joinattributestable",
@@ -1063,6 +1077,7 @@ def rectangles_sidewalk(
         trnsprt_type == "Tram"
         or trnsprt_type == "RegRailServ"
         or trnsprt_type == "Funicular"
+        or trnsprt_type == "Ferry"
     ):
         trnsprt_long = tram_long
     else:
@@ -1156,6 +1171,7 @@ def rectangles_OSMonROADline(
         trnsprt_type == "Tram"
         or trnsprt_type == "RegRailServ"
         or trnsprt_type == "Funicular"
+        or trnsprt_type == "Ferry"
     ):
         trnsprt_long = tram_long
     else:
@@ -1243,6 +1259,9 @@ def OSM_PTstps_dwnld(
     elif trnsprt_type == "Funicular":
         route = "funicular"
         route_cond = "\"station\" is 'funicular'"
+    elif trnsprt_type == "Ferry":
+        route = "ferry"
+        route_cond = "\"amenity\" is 'ferry_terminal'"
     else:
         route = "bus"
         route_cond = "\"highway\" is 'bus_stop'"
@@ -1424,6 +1443,7 @@ def stp_posGTFSnm_rect(
         trnsprt_type == "Tram"
         or trnsprt_type == "RegRailServ"
         or trnsprt_type == "Funicular"
+        or trnsprt_type == "Ferry"
     ):
         trnsprt_long = tram_long
     else:
@@ -1566,7 +1586,7 @@ def stp_posGTFSnm_rect(
     ls_to_drop = [col for col in ls_to_delete if col in exist_cols]
     GTFS_posdf = GTFS_posdf.drop(ls_to_drop, axis=1)
     GTFS_posdf = GTFS_posdf.rename(columns={"nearest_x": "lon", "nearest_y": "lat"})
-
+    print(GTFS_posdf)
     GTFS_posdf.to_csv(GTFS_nmRCT_NEWpos_CSV, index=False)
 
     files_to_del = if_remove(GTFS_nmRCT_pos_CSV1, files_to_del)

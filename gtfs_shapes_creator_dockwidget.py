@@ -46,6 +46,7 @@ from .agency_selection import (
 from .osmimport_routes_ptstops import (
     downloading_ways,
     downloading_railway,
+    downloading_ferryroutes,
     busroutes,
     full_city_roads,
     Selected_Ttbls,
@@ -65,6 +66,7 @@ from .osmimport_routes_ptstops import (
     angle_onRD_sidewalk,
     shape_assignement,
     if_not_make,
+    if_csv_exist_else_df_empty,
     if_display_r_layer,
     load_files_to_del,
     if_remove,
@@ -190,6 +192,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             "B": "Bus",
             "R": "RegRailServ",
             "FUN": "Funicular",
+            "BAT": "Ferry",
         }
         routes["trnsprt"] = (
             routes["route_desc"].map(trnsprt_correspondant).fillna("trnsprt")
@@ -272,21 +275,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         east = round(float(stops.stop_lon.max()) + 0.05, 6)
 
         OSM_ways_name = "OSM_ways"
-        OSM_ways_layer_name = "OSM_ways_lines"
         OSM_ways_gpkg = os.path.join(road_temp_folder, OSM_ways_name + ".gpkg")
-
-        OSM_tramways_name = "OSM_tramways"
-        OSM_tramways_gpkg = os.path.join(road_temp_folder, OSM_tramways_name + ".gpkg")
-
-        OSM_Regtrainways_name = "OSM_Regtrainways"
-        OSM_Regtrainways_gpkg = os.path.join(
-            road_temp_folder, OSM_Regtrainways_name + ".gpkg"
-        )
-
-        OSM_funicularways_name = "OSM_funicularways"
-        OSM_funicularways_gpkg = os.path.join(
-            road_temp_folder, OSM_funicularways_name + ".gpkg"
-        )
 
         extent = str(south) + "," + str(west) + "," + str(north) + "," + str(east)
         extent_quickosm = (
@@ -321,6 +310,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             road_temp_folder, OSM_funicular_name + ".gpkg"
         )
 
+        OSM_ferry_name = "OSM_ferry"
+        OSM_ferry_gpkg = os.path.join(road_temp_folder, OSM_ferry_name + ".gpkg")
+
         OSM_roads_nameCSV = "OSM_roads_CSV"
         OSM_roads_csv = os.path.join(road_temp_folder, OSM_roads_name + ".csv")
 
@@ -346,6 +338,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         city_Regtrain_name = "city Regtrain"
 
         city_funicular_name = "city funicular"
+
+        city_ferry_name = "city ferry"
 
         Ttlbs_txt = os.path.join(agencies_folder, "stop_times.txt")
 
@@ -440,62 +434,29 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             os.makedirs(road_temp_folder, exist_ok=True)
 
-            downloading_ways(extent, extent_quickosm, OSM_ways_gpkg)
-
-            # Saving roads (only the lines of OSM file)
-            Roads_layer_file = str(OSM_ways_gpkg) + "|layername=" + OSM_ways_layer_name
-            Roads_layer = QgsVectorLayer(Roads_layer_file, OSM_roads_name, "ogr")
+            Roads_layer = downloading_ways(extent, extent_quickosm)
             vector_layer_to_gpkg(Roads_layer, OSM_roads_name, OSM_roads_gpkg)
 
             vector_layer_to_csv(Roads_layer, OSM_roads_csv)
 
-            downloading_railway(extent, extent_quickosm, OSM_tramways_gpkg, "tram")
-
-            # Saving rails (only the lines of OSM file)
-            Rails_layer_file = (
-                str(OSM_tramways_gpkg)
-                + "|layername="
-                + str(OSM_tramways_name)
-                + "_lines"
-            )
-            Rials_layer = QgsVectorLayer(Rails_layer_file, OSM_tramways_name, "ogr")
-            vector_layer_to_gpkg(Rials_layer, OSM_tramways_name, OSM_rails_gpkg)
+            Rials_layer = downloading_railway(extent, extent_quickosm, "tram")
+            vector_layer_to_gpkg(Rials_layer, OSM_tram_name, OSM_rails_gpkg)
 
             progress.setValue(3)
             QApplication.processEvents()
 
-            downloading_railway(
-                extent, extent_quickosm, OSM_Regtrainways_gpkg, "narrow_gauge"
+            Regtrain_layer = downloading_railway(
+                extent, extent_quickosm, "narrow_gauge"
             )
-            # Saving Regtrain (only the lines of OSM file)
-            Regtrain_layer_file = (
-                str(OSM_Regtrainways_gpkg)
-                + "|layername="
-                + str(OSM_Regtrainways_name)
-                + "_lines"
-            )
-            Regtrain_layer = QgsVectorLayer(
-                Regtrain_layer_file, OSM_Regtrainways_name, "ogr"
-            )
+            vector_layer_to_gpkg(Regtrain_layer, OSM_Regtrain_name, OSM_Regtrain_gpkg)
+
+            funicular_layer = downloading_railway(extent, extent_quickosm, "funicular")
             vector_layer_to_gpkg(
-                Regtrain_layer, OSM_Regtrainways_name, OSM_Regtrain_gpkg
+                funicular_layer, OSM_funicular_name, OSM_funicular_gpkg
             )
 
-            downloading_railway(
-                extent, extent_quickosm, OSM_funicularways_gpkg, "funicular"
-            )
-            funicular_layer_file = (
-                str(OSM_funicularways_gpkg)
-                + "|layername="
-                + str(OSM_funicularways_name)
-                + "_lines"
-            )
-            funicular_layer = QgsVectorLayer(
-                funicular_layer_file, OSM_funicularways_name, "ogr"
-            )
-            vector_layer_to_gpkg(
-                funicular_layer, OSM_funicularways_name, OSM_funicular_gpkg
-            )
+            ferry_layer = downloading_ferryroutes(extent, extent_quickosm, "ferry")
+            vector_layer_to_gpkg(ferry_layer, OSM_ferry_name, OSM_ferry_gpkg)
 
             progress.setValue(4)
             QApplication.processEvents()
@@ -546,8 +507,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             dfnomatch = pd.read_csv(dfnomatch_csv)
         if os.path.exists(GTFSnm_rect_csv):
             GTFSnm_rect = pd.read_csv(GTFSnm_rect_csv)
-        if os.path.exists(GTFSnmRCT_posdf_csv):
-            GTFSnmRCT_posdf = pd.read_csv(GTFSnmRCT_posdf_csv)
+        GTFSnmRCT_posdf = if_csv_exist_else_df_empty(GTFSnmRCT_posdf_csv)
 
         if os.path.exists(ls_buses_done_csv):
             ls_buses_df = pd.read_csv(ls_buses_done_csv)
@@ -678,6 +638,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             OSM_funicular_gpkg, city_funicular_name, "ogr"
         )
 
+        city_ferry_layer = QgsVectorLayer(OSM_ferry_gpkg, city_ferry_name, "ogr")
+
         # create GTFSstops gpkg with angle of the nearest road
 
         i_row = lines_df_row_init
@@ -704,6 +666,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             elif lines_df.loc[i_row, "trnsprt_type"] == "Funicular":
                 GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(
                     city_funicular_layer,
+                    line,
+                    GTFSstops_path,
+                    temproadfldr,
+                    temp_GTFSnm_folder,
+                )
+            elif lines_df.loc[i_row, "trnsprt_type"] == "Ferry":
+                GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(
+                    city_ferry_layer,
                     line,
                     GTFSstops_path,
                     temproadfldr,
@@ -993,8 +963,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 i_row,
                 {"GTFSnmRCT_newOSMpos": NEWpos_file_nmRCT},
             )
-            posdf = pd.read_csv(NEWpos_file_nmRCT)
-            GTFSnmRCT_posdf = pd.concat([GTFSnmRCT_posdf, posdf], ignore_index=True)
+            if os.path.exists(NEWpos_file_nmRCT):
+                posdf = pd.read_csv(NEWpos_file_nmRCT)
+                GTFSnmRCT_posdf = pd.concat([GTFSnmRCT_posdf, posdf], ignore_index=True)
             i_row += 1
 
         files_to_del = if_remove(GTFSnmRCT_posdf_csv, files_to_del)
@@ -1039,28 +1010,14 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         self.stopsnmRDlistWidget.clear()  # Clear existing items
 
-        folder_OSM = "OSM_data"
-        road_temp_folder = os.path.join(agencies_folder, folder_OSM)
-
         temp_folder = "zoom_nmRD"
         nmRD_temp_folder = os.path.join(agencies_folder, temp_folder)
-
-        full_roads_name = "full_city_roads"
-        full_roads_gpgk = os.path.join(road_temp_folder, full_roads_name + ".gpkg")
 
         OSMallroad_name = "OSMallroad"
         OSMallroad_gpkg = os.path.join(nmRD_temp_folder, OSMallroad_name + ".gpkg")
 
         tram_rails_name = "OSM_tram"
         tram_rails_gpgk = os.path.join(road_temp_folder, tram_rails_name + ".gpkg")
-
-        OSM_Regtrain_name = "OSM_Regtrain"
-        OSM_Regtrain_gpkg = os.path.join(road_temp_folder, OSM_Regtrain_name + ".gpkg")
-
-        OSM_funicular_name = "OSM_funicular"
-        OSM_funicular_gpkg = os.path.join(
-            road_temp_folder, OSM_funicular_name + ".gpkg"
-        )
 
         if not os.path.exists(nmRD_temp_folder):
             os.mkdir(nmRD_temp_folder)
@@ -1075,6 +1032,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 ls_roads.append(OSM_Regtrain_gpkg)
             if os.path.exists(OSM_funicular_gpkg):
                 ls_roads.append(OSM_funicular_gpkg)
+            if os.path.exists(OSM_ferry_gpkg):
+                ls_roads.append(OSM_ferry_gpkg)
             params = {
                 "LAYERS": ls_roads,
                 "CRS": QgsCoordinateReferenceSystem("EPSG:4326"),
@@ -1111,7 +1070,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         )
 
         to_check = check_the_off_road_pt_stops(
-            temp_OSM_for_routing,
             nmRD_temp_folder,
             OSMallroad_gpkg,
             allstops_name,
@@ -1144,13 +1102,11 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             display_OSM_and_SWISSTOPO_IMAGE_maps()
 
-            if_display_r_layer(OSM_roads_gpkg, city_roads_name)
-
-            if_display_r_layer(OSM_rails_gpkg, city_rails_name)
-
-            if_display_r_layer(OSM_Regtrain_gpkg, city_Regtrain_name)
-
-            if_display_r_layer(OSM_funicular_gpkg, city_funicular_name)
+            if_display_r_layer(full_roads_gpgk, full_roads_name)
+            if_display_r_layer(tram_rails_gpgk, tram_rails_name)
+            if_display_r_layer(OSM_Regtrain_gpkg, OSM_Regtrain_name)
+            if_display_r_layer(OSM_funicular_gpkg, OSM_funicular_name)
+            if_display_r_layer(OSM_ferry_gpkg, OSM_ferry_name)
 
             display_all_OSM4routing_trips_stops(
                 temp_OSM_for_routing, ls_buses_selected, lines_df
@@ -1245,6 +1201,9 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             road_temp_folder, OSM_funicular_name + ".gpkg"
         )
 
+        OSM_ferry_name = "OSM_ferry"
+        OSM_ferry_gpkg = os.path.join(road_temp_folder, OSM_ferry_name + ".gpkg")
+
         tempfolder = "temp/temp_OSM_forrouting"
         temp_OSM_for_routing = os.path.join(agencies_folder, tempfolder)
 
@@ -1320,6 +1279,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 tram_rails_gpgk,
                 OSM_Regtrain_gpkg,
                 OSM_funicular_gpkg,
+                OSM_ferry_gpkg,
                 temp_folder_minitrip,
             )
         except Exception:
@@ -1344,6 +1304,7 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if_display_r_layer(OSM_Regtrain_gpkg, OSM_Regtrain_name)
 
         if_display_r_layer(OSM_funicular_gpkg, OSM_funicular_name)
+        if_display_r_layer(OSM_ferry_gpkg, OSM_ferry_name)
 
         takeoff_ = lambda a: "".join([x for x in list(a) if x != "_"])
         ls_selected_line_names = [takeoff_(x) for x in ls_buses_selected]
@@ -1654,6 +1615,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 trnsp = "Funicular"
                 shrt_name = line[10:]
                 line_name = trnsp + shrt_name
+            elif "Ferry" in line:
+                trnsp = "Ferry"
+                shrt_name = line[6:]
+                line_name = trnsp + shrt_name
             elif "RegRailServ" in line:
                 trnsp = "RegRailServ"
                 shrt_name = line[12:]
@@ -1782,6 +1747,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         OSM_funicular_gpkg = os.path.join(
             road_temp_folder, OSM_funicular_name + ".gpkg"
         )
+        OSM_ferry_name = "OSM_ferry"
+        OSM_ferry_gpkg = os.path.join(road_temp_folder, OSM_ferry_name + ".gpkg")
 
         selected_items = self.tripsListWidget.selectedItems()
         ls_to_disp = [item.text() for item in selected_items]
@@ -1789,9 +1756,11 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         display_OSM_and_SWISSTOPO_IMAGE_maps()
 
         if_display_r_layer(full_roads_gpgk, full_roads_name)
+        if_display_r_layer(full_roads_gpgk, full_roads_name)
         if_display_r_layer(tram_rails_gpgk, tram_rails_name)
         if_display_r_layer(OSM_Regtrain_gpkg, OSM_Regtrain_name)
         if_display_r_layer(OSM_funicular_gpkg, OSM_funicular_name)
+        if_display_r_layer(OSM_ferry_gpkg, OSM_ferry_name)
 
         for trip in ls_to_disp:
             if not QgsProject.instance().mapLayersByName(str(trip[:-5])):
