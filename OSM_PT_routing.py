@@ -98,10 +98,10 @@ def defining_minitrips(OSM4rout_csv, OSM4routing_csv, lines_trips_csv):
     lines_trips = pd.DataFrame(ls_lines_trips)
     lines_trips = lines_trips.rename(columns={0: "line_trip"})
     pattern = re.compile(
-        r"(?:Bus|RegRailServ|Tram|Funicular|trnsprt|transport)([A-Za-z0-9+]+)_"
+        r"(?:Bus|RegRailServ|Tram|Funicular|Ferry|trnsprt|transport)([A-Za-z0-9+]+)_"
     )
     pattern2 = re.compile(
-        r"^(Bus|RegRailServ|Tram|Funicular|transport|trnsprt)(.*)_[^_]+$"
+        r"^(Bus|RegRailServ|Tram|Funicular|Ferry|transport|trnsprt)(.*)_[^_]+$"
     )
     trip_number_pattern = re.compile(r"_trip(\d+)$")
 
@@ -130,6 +130,7 @@ def mini_routing(
     tram_rails_gpgk,
     OSM_Regtrain_gpkg,
     OSM_funicular_gpkg,
+    OSM_ferry_gpkg,
     temp_folder_minitrip,
 ):
     mini_trips_unsorted = pd.read_csv(
@@ -202,6 +203,7 @@ def mini_routing(
                     tram_rails_gpgk,
                     OSM_Regtrain_gpkg,
                     OSM_funicular_gpkg,
+                    OSM_ferry_gpkg,
                     mini_trips,
                     i_row,
                     start_point,
@@ -219,6 +221,7 @@ def mini_routing_finally(
     tram_rails_gpgk,
     OSM_Regtrain_gpkg,
     OSM_funicular_gpkg,
+    OSM_ferry_gpkg,
     mini_trips,
     i_row,
     start_point,
@@ -242,6 +245,14 @@ def mini_routing_finally(
         if_remove_single_file(mini_trip_gpkg)
         mini_routing_for_rail(
             OSM_funicular_gpkg,
+            start_point,
+            end_point,
+            mini_trip_gpkg,
+        )
+    elif "Ferry" in str(mini_trips.loc[i_row, "line_name"]):
+        if_remove_single_file(mini_trip_gpkg)
+        mini_routing_for_rail(
+            OSM_ferry_gpkg,
             start_point,
             end_point,
             mini_trip_gpkg,
@@ -700,7 +711,6 @@ def save_csv_overwrite_gpkg(name, gpkg, csv):
 
 
 def check_the_off_road_pt_stops(
-    temp_OSM_for_routing,
     nmRD_temp_folder,
     OSMallroad_gpkg,
     allstops_name,

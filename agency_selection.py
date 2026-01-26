@@ -121,6 +121,7 @@ def create_agecies_gtfs(agen_folder, agencies_num, gtfs_folder_path):
         "B": "Bus",
         "R": "RegRailServ",
         "FUN": "Funicular",
+        "BAT": "Ferry",
     }
     agency_routes["trnsprt"] = (
         agency_routes["route_desc"].map(trnsprt_correspondant).fillna("trnsprt")

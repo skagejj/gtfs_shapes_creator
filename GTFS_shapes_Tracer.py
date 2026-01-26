@@ -199,12 +199,13 @@ def shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg):
         i_row6 += 1
         i_row7 += 1
 
-    dlon6 = trip.loc[i_row6, "lon"] - trip.loc[i_row4, "lon"]
-    dlon5 = trip.loc[i_row5, "lon"] - trip.loc[i_row4, "lon"]
-    dlat6 = trip.loc[i_row6, "lat"] - trip.loc[i_row4, "lat"]
-    dlat5 = trip.loc[i_row5, "lat"] - trip.loc[i_row4, "lat"]
-    if dlon5 * dlon5 + dlat5 * dlat5 > dlon6 * dlon6 + dlat6 * dlat6:
-        ls_idx_to_del.append(i_row5)
+    if i_row6 < len(trip):
+        dlon6 = trip.loc[i_row6, "lon"] - trip.loc[i_row4, "lon"]
+        dlon5 = trip.loc[i_row5, "lon"] - trip.loc[i_row4, "lon"]
+        dlat6 = trip.loc[i_row6, "lat"] - trip.loc[i_row4, "lat"]
+        dlat5 = trip.loc[i_row5, "lat"] - trip.loc[i_row4, "lat"]
+        if dlon5 * dlon5 + dlat5 * dlat5 > dlon6 * dlon6 + dlat6 * dlat6:
+            ls_idx_to_del.append(i_row5)
 
     trip = trip.drop(ls_idx_to_del)
 
