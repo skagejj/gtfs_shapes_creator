@@ -32,70 +32,19 @@ def update_trips_list(outputspath):
     return ls_trips_to_display
 
 
-def shp_dst_trvl(lines_trips_csv, trip_gpkg, trip_name):
+def shape_txt(
+    trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg, outputspath, lines_trips_csv
+):
+
+    trip_csv = os.path.join(outputspath, str(trip_name) + ".csv")
     lines_trips = pd.read_csv(lines_trips_csv, dtype="str", index_col="line_trip")
-
-    trip_csv = lines_trips.loc[trip_name, "csv"]
-
-    trip_layer = QgsVectorLayer(trip_gpkg, trip_name, "ogr")
-
-    field_index = trip_layer.fields().indexFromName("dist_stops")
-
-    if field_index != -1:
-        trip_layer.startEditing()
-        trip_layer.deleteAttribute(field_index)
-        trip_layer.commitChanges()
-
-    pr = trip_layer.dataProvider()
-    pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
-    trip_layer.updateFields()
-
-    expression1 = QgsExpression("$length")
-
-    context = QgsExpressionContext()
-    context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(trip_layer))
-
-    with edit(trip_layer):
-        for f in trip_layer.getFeatures():
-            context.setFeature(f)
-            f["dist_stops"] = expression1.evaluate(context)
-            trip_layer.updateFeature(f)
-    trip_layer.commitChanges()
-
-    lsto_keep = ["layer", "dist_stops"]
-
-    if_remove_single_file(trip_csv)
-    vector_layer_to_csv(trip_layer, trip_csv, fields_to_keep=lsto_keep)
-
-    trip_df = pd.read_csv(trip_csv, dtype={"dist_stops": "float"})
-
-    i_row2 = -1
-    i_row = 0
-    while i_row < len(trip_df):
-        line_trip_1st_2nd = str(trip_df.loc[i_row, "layer"])
-        pattern1 = r"^(.*)_"
-        pattern2 = r"(\d+)$"
-        line_trip = re.match(pattern1, line_trip_1st_2nd).group(1)
-        nd2pos = re.search(pattern2, line_trip_1st_2nd).group(1)
-        trip_df.loc[i_row, "seq_stpID"] = str(line_trip) + "_pos" + str(nd2pos)
-        if i_row2 > -1:
-            trip_df.loc[i_row, "shape_dist_traveled"] = (
-                trip_df.loc[i_row, "dist_stops"]
-                + trip_df.loc[i_row2, "shape_dist_traveled"]
-            )
-        else:
-            trip_df.loc[i_row, "shape_dist_traveled"] = trip_df.loc[i_row, "dist_stops"]
-        i_row2 += 1
-        i_row += 1
-
-    if_remove_single_file(trip_csv)
-    trip_df.to_csv(trip_csv, index=False)
-
-
-def shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg):
+    lines_trips.loc[trip_name, "csv"] = trip_csv
     processing.run(
         "native:extractvertices", {"INPUT": trip_gpkg, "OUTPUT": trip_vertex_gpkg}
     )
+
+    if_remove_single_file(lines_trips_csv)
+    lines_trips.to_csv(lines_trips_csv)
 
     trip_vertex_layer = QgsVectorLayer(trip_vertex_gpkg, trip_name, "ogr")
 
@@ -127,12 +76,15 @@ def shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg):
 
     trip_vertex_layer.commitChanges()
 
-    lstokeep = ["fid", "line_trip", "lon", "lat"]
+    lstokeep = ["fid", "line_trip", "lon", "lat", "distance", "layer"]
 
     if_remove_single_file(shape_csv)
     vector_layer_to_csv(trip_vertex_layer, shape_csv, fields_to_keep=lstokeep)
 
     trip = pd.read_csv(shape_csv, dtype={"fid": "int"})
+
+    trip["dist"] = trip["distance"].diff().fillna(0).where(trip["distance"] != 0, 0)
+
     i_row = 0
     i_row2 = 1
     i_row3 = 2
@@ -214,6 +166,31 @@ def shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg):
     trip = trip.drop("fid", axis=1)
     trip = trip.rename(columns={"index": "fid"})
 
+    trip["shape_dist_traveled"] = trip["dist"].cumsum()
+    trip["shape_dist_traveled"] = trip["shape_dist_traveled"] * 10000000
+
+    trip = trip.astype({"shape_dist_traveled": int})
+    items = []
+    for layer in trip.layer.unique():
+        max_dist_stops = max(trip[trip["layer"] == layer].shape_dist_traveled)
+        items.append({"layer": layer, "shape_dist_traveled": max_dist_stops})
+
+    trip_df = pd.DataFrame(items)
+
+    i_row = 0
+    while i_row < len(trip_df):
+        line_trip_1st_2nd = str(trip_df.loc[i_row, "layer"])
+        pattern1 = r"^(.*)_"
+        pattern2 = r"(\d+)$"
+        line_trip = re.match(pattern1, line_trip_1st_2nd).group(1)
+        nd2pos = re.search(pattern2, line_trip_1st_2nd).group(1)
+        trip_df.loc[i_row, "seq_stpID"] = str(line_trip) + "_pos" + str(nd2pos)
+        i_row += 1
+    if_remove_single_file(trip_csv)
+    trip_df.to_csv(trip_csv, index=False)
+    lstokeep = ["fid", "line_trip", "lon", "lat", "shape_dist_traveled"]
+    trip = trip[lstokeep]
+
     return trip
 
 
@@ -228,13 +205,15 @@ def stop_times_update(
     lines_df = pd.read_csv(lines_df_csv, dtype="str", index_col="line_name")
     lines_trips = pd.read_csv(lines_trips_csv, dtype="str", index_col="line_trip")
 
-    trips = pd.read_csv(lines_trips.loc[trip_name, "csv"])
+    trip_csv = pd.read_csv(
+        lines_trips.loc[trip_name, "csv"], dtype={"shape_dist_traveled": "int"}
+    )
 
     line_name = lines_trips.loc[trip_name, "line_name"]
     stop_times_with_seq_csv = lines_df.loc[line_name, "GTFSstop_times_with_seq"]
     Ttbl_with_seq = pd.read_csv(stop_times_with_seq_csv)
 
-    trips_to_merge = trips[["seq_stpID", "shape_dist_traveled"]]
+    trips_to_merge = trip_csv[["seq_stpID", "shape_dist_traveled"]]
 
     trip = re.search(r"(\d+)$", trip_name).group(1)
 
@@ -249,14 +228,14 @@ def stop_times_update(
         if np.isnan(Ttbl_with_seq.loc[i_row, "shape_dist_traveled"]):
             trip_id = Ttbl_with_seq.loc[i_row, "trip_id"]
             i_row_prec = i_row - 1
-            for idx in trips.index:
-                if round(trips.loc[idx, "shape_dist_traveled"], 3) == round(
+            for idx in trip_csv.index:
+                if round(trip_csv.loc[idx, "shape_dist_traveled"], 3) == round(
                     Ttbl_with_seq.loc[i_row_prec, "shape_dist_traveled"], 3
                 ):
                     idx2 = idx + 1
                     try:
                         Ttbl_with_seq.loc[i_row, "shape_dist_traveled"] = round(
-                            trips.loc[idx2, "shape_dist_traveled"], 3
+                            trip_csv.loc[idx2, "shape_dist_traveled"], 3
                         )
                     except Exception:
                         pass

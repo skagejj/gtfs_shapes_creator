@@ -430,7 +430,7 @@ def count_time_left_2(tot, i_row, n_minitr):
     return tot, i_row, n_minitr
 
 
-def trips(trip, trip_gpkg, trip_csv, temp_folder_minitrip):
+def trips(trip, trip_gpkg, temp_folder_minitrip):
 
     ls_files_tempfld = os.listdir(temp_folder_minitrip)
     ls_with_gpkg = [file for file in ls_files_tempfld if "gpkg" in file]
@@ -464,57 +464,6 @@ def trips(trip, trip_gpkg, trip_csv, temp_folder_minitrip):
             "OUTPUT": trip_gpkg,
         }
         processing.run("native:mergevectorlayers", params)
-
-        trip_layer = QgsVectorLayer(trip_gpkg, trip, "ogr")
-
-        pr = trip_layer.dataProvider()
-        pr.addAttributes([QgsField("dist_stops", QVariant.Double)])
-        trip_layer.updateFields()
-
-        expression1 = QgsExpression("$length")
-        # expression2 = QgsExpression('regexp_substr( "layer" ,\'(\\d+)$\')')
-
-        context = QgsExpressionContext()
-        context.appendScopes(
-            QgsExpressionContextUtils.globalProjectLayerScopes(trip_layer)
-        )
-
-        with edit(trip_layer):
-            for f in trip_layer.getFeatures():
-                context.setFeature(f)
-                f["dist_stops"] = expression1.evaluate(context)
-                trip_layer.updateFeature(f)
-        trip_layer.commitChanges()
-
-        lsto_keep = ["layer", "dist_stops", "start", "end"]
-        if_remove_single_file(trip_csv)
-        vector_layer_to_csv(trip_layer, trip_csv, fields_to_keep=lsto_keep)
-
-        trip_df = pd.read_csv(trip_csv, dtype={"dist_stops": "float"})
-
-        i_row2 = -1
-        i_row = 0
-        while i_row < len(trip_df):
-            line_trip_1st_2nd = str(trip_df.loc[i_row, "layer"])
-            pattern1 = r"^(.*)_"
-            pattern2 = r"(\d+)$"
-            line_trip = re.match(pattern1, line_trip_1st_2nd).group(1)
-            nd2pos = re.search(pattern2, line_trip_1st_2nd).group(1)
-            trip_df.loc[i_row, "seq_stpID"] = str(line_trip) + "_pos" + str(nd2pos)
-            if i_row2 > -1:
-                trip_df.loc[i_row, "shape_dist_traveled"] = (
-                    trip_df.loc[i_row, "dist_stops"]
-                    + trip_df.loc[i_row2, "shape_dist_traveled"]
-                )
-            else:
-                trip_df.loc[i_row, "shape_dist_traveled"] = trip_df.loc[
-                    i_row, "dist_stops"
-                ]
-            i_row2 += 1
-            i_row += 1
-
-        if_remove_single_file(trip_csv)
-        trip_df.to_csv(trip_csv, index=False)
 
 
 def move_OSMstops_on_the_road(

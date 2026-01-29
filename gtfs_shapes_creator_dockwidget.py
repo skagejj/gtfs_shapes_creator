@@ -91,7 +91,6 @@ from .OSM_PT_routing import (
 
 from .GTFS_shapes_Tracer import (
     update_trips_list,
-    shp_dst_trvl,
     shape_txt,
     stop_times_update,
 )
@@ -1313,11 +1312,10 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             trip = str(lines_trips.loc[idx, "line_trip"])
 
             trip_gpkg = os.path.join(outputspath, str(trip) + ".gpkg")
-            trip_csv = os.path.join(outputspath, str(trip) + ".csv")
+
             lines_trips.loc[idx, "gpkg"] = trip_gpkg
-            lines_trips.loc[idx, "csv"] = trip_csv
             if not os.path.exists(trip_gpkg):
-                trips(trip, trip_gpkg, trip_csv, temp_folder_minitrip)
+                trips(trip, trip_gpkg, temp_folder_minitrip)
 
             if [x for x in ls_selected_line_names if x in trip]:
                 if not QgsProject.instance().mapLayersByName(str(trip)):
@@ -1402,9 +1400,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         tempfolder = "temp/lines_trips"
         temp_folder_linestrip = os.path.join(agencies_folder, tempfolder)
 
-        tempfolder = "temp/stop_times_perroute"
-        temp_folder_Ttbls_per_route = os.path.join(agencies_folder, tempfolder)
-
         shapes_txt = os.path.join(agencies_folder, "shapes.txt")
 
         Ttlbs_txt = os.path.join(agencies_folder, "stop_times.txt")
@@ -1432,11 +1427,6 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         progress.setValue(2)
         QApplication.processEvents()
 
-        for trip_to_shape in ls_trip_to_shape:
-            trip_gpkg = os.path.join(outputspath, trip_to_shape)
-            trip_name = str(trip_to_shape[:-5])
-            shp_dst_trvl(lines_trips_csv, trip_gpkg, trip_name)
-
         Ttbls = pd.read_csv(Ttlbs_txt, dtype="str")
 
         if "shape_dist_traveled" in Ttbls.columns:
@@ -1451,11 +1441,19 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         for trip_to_shape in ls_trip_to_shape:
             trip_gpkg = os.path.join(outputspath, trip_to_shape)
             trip_name = str(trip_to_shape[:-5])
+
             trip_vertex_gpkg = os.path.join(
                 temp_folder_linestrip, trip_name + "_vertex.gpkg"
             )
             shape_csv = os.path.join(shape_folder, str(trip_name) + ".csv")
-            trip = shape_txt(trip_gpkg, trip_name, shape_csv, trip_vertex_gpkg)
+            trip = shape_txt(
+                trip_gpkg,
+                trip_name,
+                shape_csv,
+                trip_vertex_gpkg,
+                outputspath,
+                lines_trips_csv,
+            )
             Ttbl_with_seq = stop_times_update(
                 trip_name,
                 lines_df_csv,
@@ -1485,6 +1483,8 @@ class GtfsShapesCreatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         Ttbls = pd.read_csv(Ttlbs_txt)
         Ttbls_to_merge = Ttbls_with_seq[["orig_id", "shape_dist_traveled"]]
         Ttbls = Ttbls.merge(Ttbls_to_merge, how="left", on="orig_id")
+
+        Ttbls = Ttbls.astype({"shape_dist_traveled": int})
 
         os.remove(Ttlbs_txt)
         Ttbls.to_csv(Ttlbs_txt, index=False)
